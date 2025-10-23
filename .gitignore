@@ -1,0 +1,6 @@
+# created by virtualenv automatically
+
+.venv
+.env
+src/death.txt
+src/death_log.txt
