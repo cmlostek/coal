@@ -1,18 +1,26 @@
 import discord
 import os
 import io
+import asyncio
 from dotenv import load_dotenv
 from discord.ext.commands import *
+from discord.ext import tasks
 import sqlite3 as sql
+from mcstatus import JavaServer
 
 intents = discord.Intents.default()
 intents.message_content = True  # Enable the message content intent
 
+TOKEN = os.getenv('DISCORD_TOKEN')
+MINECRAFT_SERVER = os.getenv('MINECRAFT_SERVER')
+VOICE_CHANNEL = os.getenv('VOICE_CHANNEL')
 bot = Bot(command_prefix='-', intents=intents)
 
 @bot.event
 async def on_ready():
+    # log_channel = bot.get_channel(1431380117556564090)  # Replace with your channel ID
     print(f'We have logged in as {bot.user}')
+    # await log_channel.send(f'Logged in as {bot.user}')
     # Initialize the database connection and ensure tables exist
     bot.db = sql.connect('coal_db2.sqlite3', check_same_thread=False)
     # Ensure the death_log table exists (create columns used by the code)
@@ -26,6 +34,23 @@ async def on_ready():
                   )
               ''')
     bot.db.commit()
+
+    """Bot startup event."""
+    print(f'{bot.user} has connected to Discord!')
+    print(f'Monitoring Minecraft server: {MINECRAFT_SERVER}')
+
+    # Sync slash commands
+    try:
+        synced = await bot.tree.sync()
+        print(f'Synced {len(synced)} command(s)')
+    except Exception as e:
+        print(f'Failed to sync commands: {e}')
+
+    # Start the voice channel update task
+    if VOICE_CHANNEL:
+        update_voice_channel.start()
+    else:
+        print('No voice channel ID configured - skipping auto-update')
 
 
 
@@ -89,7 +114,7 @@ async def death(ctx, *args):
                 await ctx.send('A new soul has entered the graveyard.')
 
 @bot.command()
-async def obituary(ctx, *args):
+async def obit(ctx, *args):
     '''
     Retrieves and sends the obituary for a specific user.
     :args The ID of the user whose obituary is to be retrieved. If None, retrieves the log for the command invoker. To send the entire log, use 1 as your user_id. To get the obituaty for users not in the server, use 0 as the id.
@@ -100,7 +125,7 @@ async def obituary(ctx, *args):
         user_id = args[0]
 
     c = bot.db.cursor()
-    if user_id == '1':
+    if user_id == '-1':
         c.execute('SELECT id, cntr, reason FROM death_log ORDER BY cntr')
         rows = c.fetchall()
         if not rows:
@@ -194,6 +219,165 @@ async def echo(ctx, *, message):
     '''Echoes the provided message back to the user.'''
     await ctx.send(message)
     await ctx.message.delete()
+
+@bot.command()
+async def snipe(ctx):
+    '''Retrieves the last deleted message in the channel.'''
+    sniped = snipe_messages_delete.get(ctx.channel.id)
+    if sniped:
+        content, author, timestamp = sniped
+        embed = discord.Embed(description=content, color=discord.Color.purple(), timestamp=timestamp)
+        embed.set_author(name=str(author), icon_url=author.avatar.url if author.avatar else None)
+        await ctx.send(embed=embed)
+    else:
+        await ctx.send('No recently deleted messages to snipe.')
+
+
+snipe_messages_delete = {}
+@bot.event
+async def on_message_delete(message):
+    if message.guild:  # Ensure it's not a DM
+        snipe_messages_delete[message.channel.id] = (
+            message.content,
+            message.author,
+            message.created_at
+        )
+    await asyncio.sleep(20)
+    # print(snipe_messages_delete)
+    snipe_messages_delete.clear()
+
+
+async def get_server_status():
+    """Query the Minecraft server and return status information."""
+    try:
+        server = JavaServer.lookup(MINECRAFT_SERVER)
+        status = await asyncio.to_thread(server.status)
+
+        return {
+            'online': True,
+            'players_online': status.players.online,
+            'players_max': status.players.max,
+            'player_list': [player.name for player in status.players.sample] if status.players.sample else [],
+            'version': status.version.name,
+            'latency': status.latency,
+            'motd': status.description
+        }
+    except Exception as e:
+        return {
+            'online': False,
+            'error': str(e)
+        }
+
+
+@bot.command(name='status', description='Get the current status of the Minecraft server')
+async def status(interaction: discord.Interaction):
+    """Slash command to check Minecraft server status."""
+    await interaction.response.defer()
+
+    status_data = await get_server_status()
+
+    if status_data['online']:
+        # Create embed for online server
+        embed = discord.Embed(
+            title='🟢 Minecraft Server Status',
+            description=f'**{MINECRAFT_SERVER}**',
+            color=discord.Color.green()
+        )
+
+        embed.add_field(
+            name='Players Online',
+            value=f"{status_data['players_online']}/{status_data['players_max']}",
+            inline=True
+        )
+
+        embed.add_field(
+            name='Version',
+            value=status_data['version'],
+            inline=True
+        )
+
+        embed.add_field(
+            name='Latency',
+            value=f"{status_data['latency']:.1f}ms",
+            inline=True
+        )
+
+        # Add player list if available
+        if status_data['player_list']:
+            player_names = '\n'.join(status_data['player_list'])
+            embed.add_field(
+                name='Players',
+                value=player_names,
+                inline=False
+            )
+        elif status_data['players_online'] > 0:
+            embed.add_field(
+                name='Players',
+                value='_Player list hidden by server_',
+                inline=False
+            )
+
+        # Add MOTD if available
+        motd_text = str(status_data['motd'])
+        if motd_text:
+            embed.add_field(
+                name='MOTD',
+                value=motd_text[:1024],  # Discord field limit
+                inline=False
+            )
+
+        embed.set_footer(text='Server is online')
+
+    else:
+        # Create embed for offline server
+        embed = discord.Embed(
+            title='🔴 Minecraft Server Status',
+            description=f'**{MINECRAFT_SERVER}**',
+            color=discord.Color.red()
+        )
+
+        embed.add_field(
+            name='Status',
+            value='Server is offline or unreachable',
+            inline=False
+        )
+
+        embed.set_footer(text=f"Error: {status_data.get('error', 'Unknown error')}")
+
+    await interaction.followup.send(embed=embed)
+
+
+@tasks.loop(minutes=5)
+async def update_voice_channel():
+    """Background task to update voice channel name with player count."""
+    try:
+        channel = bot.get_channel(VOICE_CHANNEL)
+        if not channel:
+            print(f'Voice channel {VOICE_CHANNEL} not found')
+            return
+
+        status_data = await get_server_status()
+
+        if status_data['online']:
+            new_name = f"Players: {status_data['players_online']}/{status_data['players_max']}"
+        else:
+            new_name = "Server: Offline"
+
+        # Only update if the name has changed (to avoid rate limits)
+        if channel.name != new_name:
+            await channel.edit(name=new_name)
+            print(f'Updated voice channel to: {new_name}')
+
+    except discord.errors.HTTPException as e:
+        print(f'Failed to update voice channel: {e}')
+    except Exception as e:
+        print(f'Error in voice channel update task: {e}')
+
+
+@update_voice_channel.before_loop
+async def before_update_voice_channel():
+    """Wait for the bot to be ready before starting the task."""
+    await bot.wait_until_ready()
 
 if __name__ == '__main__':
     load_dotenv()
