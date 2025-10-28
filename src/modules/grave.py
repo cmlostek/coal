@@ -115,7 +115,7 @@ def setup(bot):
             return
 
         await death_channel.send(
-            f'🕊️ A soul has been revived: <@{target_id_for_query}>. \n  They found the reason to live because of  + {str(reason)}' or 'No reason provided.')
+            f'🕊️ A soul has been revived: <@{target_id_for_query}>. \n  They found the reason to live because of {str(reason)}' or 'No reason provided.')
 
     @bot.command(name='obit', aliases=['obituary', 'death_log', 'deaths', 'log', 'l'])
     async def obit(ctx, *args):
