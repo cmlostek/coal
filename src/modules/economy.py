@@ -285,67 +285,69 @@ def setup(bot):
             await ctx.send(f"Sorry, you lost {bet} coins.")
         bot.db.commit()
 
+
+    @bot.command()
+    async def a_give(ctx, user: discord.Member, amount: int):
         permissions = ctx.permissions_for(ctx.author)
-        @bot.command()
-        async def a_give(ctx, user: discord.Member, amount: int):
-            if permissions.administrator:
-                '''Admin command to give a specified amount of coins to another user.'''
-                if amount <= 0:
-                    await ctx.send("Please enter a positive amount to give.")
+        if permissions.administrator:
+            '''Admin command to give a specified amount of coins to another user.'''
+            if amount <= 0:
+                await ctx.send("Please enter a positive amount to give.")
+                return
+
+            target_id = user.id
+
+            try:
+                c = bot.db.cursor()
+                # Check if recipient exists in database
+                c.execute('SELECT balance FROM balances WHERE user_id = ?', (target_id,))
+                recipient_balance = c.fetchone()
+
+                if not recipient_balance:
+                    # Initialize recipient with starting balance
+                    c.execute('INSERT INTO balances (user_id, balance) VALUES (?, ?)', (target_id, 1000))
+
+                # Perform the transaction
+                c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (amount, target_id))
+                bot.db.commit()
+
+                await ctx.send(f"Successfully granted {amount:,} coins to {user.name}!")
+
+            except sql.Error as e:
+                await ctx.send(f"Error processing transaction: {e}")
+                print(f"Database error in a_give command: {e}")
+
+
+    @bot.command()
+    async def a_take(ctx, user: discord.Member, amount: int):
+        permissions = ctx.permissions_for(ctx.author)
+        if permissions.administrator:
+            '''Admin command to take a specified amount of coins from another user.'''
+            if amount <= 0:
+                await ctx.send("Please enter a positive amount to take.")
+                return
+
+            user_id = ctx.author.id
+            target_id = user.id
+
+            try:
+                c = bot.db.cursor()
+                # Check recipient's balance
+                c.execute('SELECT balance FROM balances WHERE user_id = ?', (target_id,))
+                recipient_balance = c.fetchone()
+
+                if not recipient_balance or recipient_balance[0] < amount:
+                    await ctx.send("The user doesn't have enough coins!")
                     return
 
-                target_id = user.id
+                # Perform the transaction
+                c.execute('UPDATE balances SET balance = balance - ? WHERE user_id = ?', (amount, target_id))
+                bot.db.commit()
 
-                try:
-                    c = bot.db.cursor()
-                    # Check if recipient exists in database
-                    c.execute('SELECT balance FROM balances WHERE user_id = ?', (target_id,))
-                    recipient_balance = c.fetchone()
+                await ctx.send(f"Successfully took {amount:,} coins from {user.name}!")
 
-                    if not recipient_balance:
-                        # Initialize recipient with starting balance
-                        c.execute('INSERT INTO balances (user_id, balance) VALUES (?, ?)', (target_id, 1000))
-
-                    # Perform the transaction
-                    c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (amount, target_id))
-                    bot.db.commit()
-
-                    await ctx.send(f"Successfully granted {amount:,} coins to {user.name}!")
-
-                except sql.Error as e:
-                    await ctx.send(f"Error processing transaction: {e}")
-                    print(f"Database error in a_give command: {e}")
-
-
-        @bot.command()
-        async def a_take(ctx, user: discord.Member, amount: int):
-            if permissions.administrator:
-                '''Admin command to take a specified amount of coins from another user.'''
-                if amount <= 0:
-                    await ctx.send("Please enter a positive amount to take.")
-                    return
-
-                user_id = ctx.author.id
-                target_id = user.id
-
-                try:
-                    c = bot.db.cursor()
-                    # Check recipient's balance
-                    c.execute('SELECT balance FROM balances WHERE user_id = ?', (target_id,))
-                    recipient_balance = c.fetchone()
-
-                    if not recipient_balance or recipient_balance[0] < amount:
-                        await ctx.send("The user doesn't have enough coins!")
-                        return
-
-                    # Perform the transaction
-                    c.execute('UPDATE balances SET balance = balance - ? WHERE user_id = ?', (amount, target_id))
-                    bot.db.commit()
-
-                    await ctx.send(f"Successfully took {amount:,} coins from {user.name}!")
-
-                except sql.Error as e:
-                    await ctx.send(f"Error processing transaction: {e}")
-                    print(f"Database error in a_take command: {e}")
+            except sql.Error as e:
+                await ctx.send(f"Error processing transaction: {e}")
+                print(f"Database error in a_take command: {e}")
 
 
