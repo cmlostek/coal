@@ -201,7 +201,7 @@ def setup(bot):
         c.execute('UPDATE balances SET balance = balance - ? WHERE user_id = ?', (bet, user_id))
         bot.db.commit()
 
-        rolls = [random.randint(1, 6) for _ in range(6)]
+        rolls = [random.randint(1, 6) for _ in range(number_of_dice)]
         if sum(rolls) >= (number_of_dice * 3):
             # Add winnings if won
             c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (bet * 6, user_id))
