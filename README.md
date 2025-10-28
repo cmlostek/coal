@@ -2,7 +2,7 @@
 
 A Discord bot with various utility, Minecraft server monitoring, gambling, and graveyard management features.
 
-## Utility Commands (utils.py)
+## Utility Commands
 
 - **help**: Displays a list of available commands and their categories.
   - Usage: `-help`
@@ -27,15 +27,18 @@ A Discord bot with various utility, Minecraft server monitoring, gambling, and g
 - **snipe**: Retrieves the last deleted message in the channel.
   - Usage: `-snipe`
 
-## Minecraft Commands (minecraft.py)
+## Minecraft Commands
 
 - **status**: Checks the current status of the Minecraft server.
   - Usage: `-status`
 
-## Gambling Commands (gambling.py)
+## Economy Commands
 
 - **balance**: Shows your current balance.
   - Usage: `-balance`
+
+- **daily**: Claim your daily reward.
+  - Usage: `-daily`
 
 - **leaderboard**: Displays the gambling leaderboard.
   - Usage: `-leaderboard`
@@ -49,7 +52,7 @@ A Discord bot with various utility, Minecraft server monitoring, gambling, and g
 - **slots**: Play the slot machine.
   - Usage: `-slots <amount>`
 
-## Graveyard Commands (grave.py)
+## Graveyard Commands
 
 - **death**: Records a player's death.
   - Usage: `-death <reason>`
