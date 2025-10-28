@@ -18,7 +18,6 @@ def setup(bot):
         embed.add_field(name='Minecraft', value='`status`', inline=False)
         embed.add_field(name='Gambling', value='`balance`,`leaderboard`,`coinflip`, `roll`, `slots`', inline=False)
         embed.add_field(name='Graveyard', value='`death`, `revive`, `obit`', inline=False)
-        embed.set_footer(text='Use "help <command>" for more information.')
         await ctx.send(embed=embed)
 
     @bot.command()
