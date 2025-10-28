@@ -35,16 +35,26 @@ def setup(bot):
     async def daily(ctx):
         user_id = ctx.author.id
         c = bot.db.cursor()
-        c.execute('SELECT balance FROM balances WHERE user_id = ?', (user_id,))
+        c.execute('SELECT balance, last_daily FROM balances WHERE user_id = ?', (user_id,))
         result = c.fetchone()
 
         if not result:
             await ctx.send("Please run `-balance` first to initialize your account!")
             return
-        else:
-            daily_amount = 500
-            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (daily_amount, user_id))
-            await ctx.send(f"You've received your daily reward of {daily_amount:,} coins!")
+
+        import datetime
+        current_time = datetime.datetime.now().date()
+        last_daily = datetime.datetime.strptime(result[1], '%Y-%m-%d').date() if result[1] else None
+
+        if last_daily and current_time <= last_daily:
+            await ctx.send("You've already claimed your daily reward today! Come back tomorrow!")
+            return
+
+        daily_amount = 500
+        c.execute('UPDATE balances SET balance = balance + ?, last_daily = ? WHERE user_id = ?',
+                  (daily_amount, current_time.strftime('%Y-%m-%d'), user_id))
+        await ctx.send(f"You've received your daily reward of {daily_amount:,} coins!")
+        bot.db.commit()
 
         bot.db.commit()
             
