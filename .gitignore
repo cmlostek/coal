@@ -2,5 +2,5 @@
 
 .venv
 .env
-src/death.txt
-src/death_log.txt
+
+db.sqlite3
