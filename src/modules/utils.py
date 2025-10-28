@@ -13,7 +13,7 @@ def setup(bot):
     @bot.command()
     async def help(ctx):
         '''Displays a list of available commands.'''
-        embed = discord.Embed(title='Help', description='Here ',  color=discord.Color.blue())
+        embed = discord.Embed(title='Help', description='[Documentation](https://github.com/cmlostek/coal/blob/main/README.md) ',  color=discord.Color.blue())
         embed.add_field(name='Utility', value='`ping`, `greet`, `echo`, `color`, `whois`, `snipe`', inline=False)
         embed.add_field(name='Minecraft', value='`status`', inline=False)
         embed.add_field(name='Gambling', value='`balance`,`leaderboard`,`coinflip`, `roll`, `slots`', inline=False)
