@@ -1,4 +1,4 @@
-"""Gambling commands module"""
+"""Economy commands module"""
 
 import random
 import discord
@@ -30,6 +30,24 @@ def setup(bot):
         except sql.Error as e:
             await ctx.send(f'Error accessing balance: {e}')
             print(f'Database error in balance command: {e}')
+
+    @bot.command()
+    async def daily(ctx):
+        user_id = ctx.author.id
+        c = bot.db.cursor()
+        c.execute('SELECT balance FROM balances WHERE user_id = ?', (user_id,))
+        result = c.fetchone()
+
+        if not result:
+            await ctx.send("Please run `-balance` first to initialize your account!")
+            return
+        else:
+            daily_amount = 500
+            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (daily_amount, user_id))
+            await ctx.send(f"You've received your daily reward of {daily_amount:,} coins!")
+
+        bot.db.commit()
+            
 
     @bot.command()
     async def leaderboard(ctx):
