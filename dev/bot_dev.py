@@ -25,7 +25,7 @@ async def on_ready():
     print(f'We have logged in as {bot.user}')
     # await log_channel.send(f'Logged in as {bot.user}')
     # Initialize the database connection and ensure tables exist
-    bot.db = sql.connect('../src/coal_db2.sqlite3', check_same_thread=False)
+    bot.db = sql.connect('db.sql', check_same_thread=False)
     # Ensure the death_log table exists (corrected to use log_id as PK and user_id to store Discord ID)
     c = bot.db.cursor()
     c.execute('''
