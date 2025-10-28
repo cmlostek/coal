@@ -11,8 +11,8 @@ def setup(bot):
     """Setup function to register commands with the bot"""
 
     @bot.command()
-    async def balance(ctx):
-        user_id = ctx.author.id
+    async def balance(ctx, user: discord.Member = None):
+        user_id = user.id if user else ctx.author.id
 
         try:
             c = bot.db.cursor()
