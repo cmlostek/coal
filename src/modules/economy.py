@@ -288,7 +288,7 @@ def setup(bot):
 
     @bot.command()
     async def a_give(ctx, user: discord.Member, amount: int):
-        permissions = ctx.permissions_for(ctx.author)
+        permissions = ctx.author.permissions_in(ctx.guild)
         if permissions.administrator:
             '''Admin command to give a specified amount of coins to another user.'''
             if amount <= 0:
@@ -320,7 +320,7 @@ def setup(bot):
 
     @bot.command()
     async def a_take(ctx, user: discord.Member, amount: int):
-        permissions = ctx.permissions_for(ctx.author)
+        permissions = ctx.author.permissions_in(ctx.guild)
         if permissions.administrator:
             '''Admin command to take a specified amount of coins from another user.'''
             if amount <= 0:
