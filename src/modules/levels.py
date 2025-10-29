@@ -43,7 +43,7 @@ def setup(bot):
     @bot.event
     async def on_message(message):
         if not message.author.bot:
-            await add_xp(message.author.id, random.randint(1, 10))
+            await add_xp(message.author.id, random.randint(1, 3))
         await bot.process_commands(message)
 
     @bot.command()
