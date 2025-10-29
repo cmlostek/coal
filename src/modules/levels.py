@@ -85,3 +85,29 @@ def setup(bot):
             await ctx.send(embed=embed)
         else:
             await ctx.send('No users on the leaderboard yet!')
+
+
+
+    @bot.command()
+    async def reset(ctx, user: discord.Member = None):
+        '''Reset a user's XP and level'''
+        user = user or 'all' or ctx.author
+        if user != 'all':
+            user = bot.get_user(user.id)
+            if not user:
+                await ctx.send("User not found.")
+                return
+            else:
+                await ctx.send(f"Resetting {user.mention}'s XP and level.")
+                c = bot.db.cursor()
+                c.execute('UPDATE levels SET level = 1, xp = 0 WHERE id = ?', (user.id,))
+                bot.db.commit()
+                await ctx.send(f"Reset {user.mention}'s XP and level.")
+        else:
+            await ctx.send("Resetting all users' XP and levels.")
+            c = bot.db.cursor()
+            c.execute('UPDATE levels SET level = 1, xp = 0')
+            bot.db.commit()
+            await ctx.send("Reset all users' XP and levels.")
+
+
