@@ -90,7 +90,7 @@ async def on_ready():
     print(f'Monitoring Minecraft server: {MINECRAFT_SERVER_IP}')
 
     # Load modules
-    modules = ['utils', 'grave', 'minecraft', 'economy']
+    modules = ['utils', 'grave', 'minecraft', 'economy', 'levels']
     loaded = 0
     for module in modules:
         try:
