@@ -66,7 +66,7 @@ def setup(bot):
             await ctx.send(f"{user.mention} hasn't earned any XP yet!")
 
     @bot.command()
-    async def leaderboard(ctx):
+    async def top(ctx):
         '''Displays the top 10 users by level and experience'''
         c = bot.db.cursor()
         c.execute('SELECT id, level, xp FROM levels ORDER BY level DESC, xp DESC LIMIT 10')
