@@ -42,7 +42,7 @@ def setup(bot):
 
     @bot.event
     async def on_message(message):
-        if not message.author.bot:
+        if not message.author.bot or message.startswith('-'):
             await add_xp(message.author.id, random.randint(1, 3))
         await bot.process_commands(message)
 
