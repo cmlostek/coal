@@ -2,6 +2,14 @@
 
 A Discord bot with various utility, Minecraft server monitoring, gambling, and graveyard management features.
 
+## Setup
+- Clone the repository.
+- Install the dependencies using `pip install -r requirements.txt`.
+- Create a `.env` file in the root directory and add the following:
+  - `DISCORD_TOKEN`: Your Discord bot token.
+  - `DB`: Your database URL.
+- Run the bot using `python bot.py`. or `python3 bot.py` if you're using Python 3. You can also host the bot on a hosting platform. 
+
 ## Utility Commands
 
 - **help**: Displays a list of available commands and their categories.
@@ -40,6 +48,12 @@ A Discord bot with various utility, Minecraft server monitoring, gambling, and g
 - **daily**: Claim your daily reward.
   - Usage: `-daily`
 
+- **give**: Give coins to another user.
+  - Usage: `-give <user> <amount>`
+  - Example: `-give @user 100`
+  - Note: You can't give yourself coins!
+  - Note: You can't give coins to a user who doesn't exist in the database. Tell them to do `-balance` to add them to the database. 
+
 - **leaderboard**: Displays the gambling leaderboard.
   - Usage: `-leaderboard`
 
@@ -63,3 +77,10 @@ A Discord bot with various utility, Minecraft server monitoring, gambling, and g
 - **obit**: Shows death statistics for a user.
   - Usage: `-obit [user]`
 
+## Levels Commands
+
+- **rank**: Displays a user's level and experience.
+  - Usage: `-rank [user]`
+
+- **leaderboard**: Displays the top 10 users by level and experience.
+  - Usage: `-leaderboard`
