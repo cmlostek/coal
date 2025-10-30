@@ -138,6 +138,7 @@ def setup(bot):
             async def send_scheduled_message():
                 await asyncio.sleep(delay)
                 try:
+                    await bot.fetch_channel(channel.id)
                     await channel.send(message)
                     await ctx.send(f"Scheduled message has been sent to {channel.mention}")
                 except:
