@@ -34,9 +34,10 @@ def setup(bot):
         current_level, current_xp = c.fetchone()
 
         while current_xp >= calculate_xp_needed(current_level):
-            level_channel = 1433244417367605318
+            level_channel = await bot.fetch_channel(1433244417367605318)
             current_level += 1
-            await bot.get_channel(level_channel).send(f"Congratulations {bot.get_user(user_id).mention}! You've reached level {current_level}!")
+            await level_channel.send(
+                f"Congratulations {bot.get_user(user_id).mention}! You've reached level {current_level}!")
             c.execute('UPDATE levels SET level = ? WHERE id = ?', (current_level, user_id))
 
         bot.db.commit()
