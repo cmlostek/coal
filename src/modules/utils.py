@@ -2,6 +2,8 @@
 
 import re
 import io
+import datetime
+import asyncio
 from PIL import Image
 import discord
 from discord.ext import commands
@@ -113,3 +115,37 @@ def setup(bot):
             await ctx.send(embed=embed)
         else:
             await ctx.send('No recently deleted messages to snipe. 😔')
+
+
+    @bot.command()
+    async def schedule_send(ctx, channel: discord.TextChannel, date: str, time: str, *, message: str):
+        '''Schedules a message to be sent to a channel at a specific date and time
+        Format: YYYY-MM-DD HH:MM'''
+        try:
+            # Parse date and time
+            dt_str = f"{date} {time}"
+            schedule_time = datetime.datetime.strptime(dt_str, "%Y-%m-%d %H:%M")
+
+            # Calculate delay in seconds
+            now = datetime.datetime.now()
+            if schedule_time <= now:
+                await ctx.send("Cannot schedule messages in the past!")
+                return
+
+            delay = (schedule_time - now).total_seconds()
+
+            # Schedule the message
+            async def send_scheduled_message():
+                await asyncio.sleep(delay)
+                try:
+                    await channel.send(message)
+                    await ctx.send(f"Scheduled message has been sent to {channel.mention}")
+                except:
+                    await ctx.send("Failed to send scheduled message")
+
+            asyncio.create_task(send_scheduled_message())
+            await ctx.send(
+                f"Message scheduled to be sent to {channel.mention} at {schedule_time.strftime('%Y-%m-%d %H:%M')}")
+
+        except ValueError:
+            await ctx.send("Invalid date/time format! Please use YYYY-MM-DD HH:MM")
