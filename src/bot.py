@@ -22,7 +22,7 @@ DB = os.getenv('DATABASE')
 
 # Bot Instance
 
-bot = Bot(command_prefix='-', intents=intents, help_command=None)
+bot = Bot(command_prefix='-' or '!' or '?', intents=intents, help_command=None)
 
 
 # On Ready Event
@@ -124,3 +124,4 @@ if __name__ == '__main__':
             print("Bot stopped by user.")
         except Exception as e:
             print(f"An unexpected error occurred during bot execution: {e}")
+
