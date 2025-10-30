@@ -78,7 +78,7 @@ def setup(bot):
             embed = discord.Embed(title='Level Leaderboard', color=discord.Color.gold())
             for rank, (user_id, level, xp) in enumerate(results, start=1):
                 user = bot.get_user(user_id)
-                username = user.name if user else f'User ID {user_id}'
+                username = user.name if user else f'User <@{user_id}>'
                 embed.add_field(
                     name=f'#{rank}: {username}',
                     value=f'Level {level} - {xp:,} XP',
