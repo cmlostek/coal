@@ -82,5 +82,5 @@ A Discord bot with various utility, Minecraft server monitoring, gambling, and g
 - **rank**: Displays a user's level and experience.
   - Usage: `-rank [user]`
 
-- **leaderboard**: Displays the top 10 users by level and experience.
-  - Usage: `-leaderboard`
+- **top**: Displays the top 10 users by level and experience.
+  - Usage: `-top`

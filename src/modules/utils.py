@@ -18,7 +18,7 @@ def setup(bot):
         embed.add_field(name='Minecraft', value='`status`', inline=False)
         embed.add_field(name='Economy', value='`balance`, `daily`, `leaderboard`,`coinflip`, `roll`, `slots`, `give`', inline=False)
         embed.add_field(name='Graveyard', value='`death`, `revive`, `obit`', inline=False)
-        embed.add_field(name='levels', value='`rank`, `leaderboard`', inline=False)
+        embed.add_field(name='levels', value='`rank`, `top`', inline=False)
         await ctx.send(embed=embed)
 
     @bot.command()
