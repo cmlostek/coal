@@ -28,19 +28,32 @@ def setup(bot):
         # Insert or update user record
         c.execute('INSERT OR IGNORE INTO levels (id, level, xp) VALUES (?, 1, 0)', (user_id,))
         c.execute('UPDATE levels SET xp = xp + ? WHERE id = ?', (xp_amount, user_id))
+        bot.db.commit()
 
         # Check for level up
         c.execute('SELECT level, xp FROM levels WHERE id = ?', (user_id,))
         current_level, current_xp = c.fetchone()
 
-        while current_xp >= calculate_xp_needed(current_level):
-            level_channel = await bot.fetch_channel(1433244417367605318)
+        xp_needed = calculate_xp_needed(current_level)
+        while current_xp >= xp_needed:
+            current_xp -= xp_needed
             current_level += 1
-            await level_channel.send(
-                f"Congratulations {bot.get_user(user_id).mention}! You've reached level {current_level}!")
-            c.execute('UPDATE levels SET level = ? WHERE id = ?', (current_level, user_id))
 
-        bot.db.commit()
+            # Update database immediately
+            c.execute('UPDATE levels SET level = ?, xp = ? WHERE id = ?', (current_level, current_xp, user_id))
+            bot.db.commit()
+
+            try:
+                level_channel = await bot.fetch_channel(1433244417367605318)
+                user = await bot.fetch_user(user_id)
+                if user and level_channel:
+                    await level_channel.send(
+                        f"Congratulations {user.mention}! You've reached level {current_level}!")
+            except Exception as e:
+                print(f"Failed to send level up message: {e}")
+
+            xp_needed = calculate_xp_needed(current_level)
+
         return current_level, current_xp
 
     @bot.event
@@ -92,12 +105,10 @@ def setup(bot):
         else:
             await ctx.send('No users on the leaderboard yet!')
 
-
-
     @bot.command()
     async def reset(ctx, user: discord.Member = None):
         '''Reset a user's XP and level'''
-        user = user or 'all' or ctx.author
+        user = user or ctx.author
         if user != 'all':
             user = bot.get_user(user.id)
             if not user:
@@ -114,6 +125,4 @@ def setup(bot):
             c = bot.db.cursor()
             c.execute('UPDATE levels SET level = 1, xp = 0')
             bot.db.commit()
-            await ctx.send("Reset all users' XP and levels.")
-
-
+        await ctx.send("Reset all users XP and levels.")
