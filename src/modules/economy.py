@@ -300,13 +300,11 @@ def setup(bot):
 
         if not result:
             c.execute('INSERT INTO balances (user_id, balance, last_work) VALUES (?, ?, ?)',
-                      (user_id, 1000, current_time))
+                          (user_id, 1000, current_time.strftime('%Y-%m-%d %H:%M:%S.%f')))
             bot.db.commit()
-            balance = 1000
-            await ctx.send("Have you been here before? I'll give you a starting balance of 1,000 coins.")
         else:
             balance = result[0]
-            last_work = datetime.datetime.strptime(result[1], '%Y-%m-%d %H:%M:%S') if result[1] else None
+            last_work = datetime.datetime.strptime(result[1], '%Y-%m-%d %H:%M:%S.%f') if result[1] else None
 
             if last_work and (current_time - last_work).total_seconds() < 3600:
                 time_left = 3600 - (current_time - last_work).total_seconds()
@@ -335,12 +333,12 @@ def setup(bot):
         if outcome <= 25:
             await ctx.send(f"{random.choice(phrases_failure)} \n You lost {earnings} coins.")
             c.execute('UPDATE balances SET balance = balance - ?, last_work = ? WHERE user_id = ?',
-                      (earnings, current_time, user_id))
+                          (earnings, current_time.strftime('%Y-%m-%d %H:%M:%S.%f'), user_id))
             bot.db.commit()
         else:
             await ctx.send(f"{random.choice(phrases_success)} \n You earned {earnings} coins.")
             c.execute('UPDATE balances SET balance = balance + ?, last_work = ? WHERE user_id = ?',
-                      (earnings, current_time, user_id))
+                          (earnings, current_time.strftime('%Y-%m-%d %H:%M:%S.%f'), user_id))
             bot.db.commit()
     @bot.command()
     async def a_give(ctx, user: discord.Member, amount: int):
