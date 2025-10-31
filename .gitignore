@@ -1,5 +1,6 @@
 # created by virtualenv automatically
 .idea
+.idea/dataSources
 .venv
 .env
 
