@@ -73,9 +73,11 @@ def setup(bot):
         if result:
             level, xp = result
             xp_needed = calculate_xp_needed(level)
+            total_xp = sum(calculate_xp_needed(lvl) for lvl in range(1, level)) + xp
             embed = discord.Embed(title=f"{user.name}'s Rank", color=discord.Color.blue())
             embed.add_field(name="Level", value=str(level), inline=True)
-            embed.add_field(name="XP", value=f"{xp:,}/{xp_needed:,}", inline=True)
+            embed.add_field(name="Level Progress", value=f"{xp:,}/{xp_needed:,}", inline=True)
+            embed.add_field(name="Total XP", value=f"{total_xp:,}", inline=True)
             embed.set_thumbnail(url=user.display_avatar.url)
             await ctx.send(embed=embed)
         else:
@@ -96,9 +98,10 @@ def setup(bot):
                     username = user.name
                 except:
                     username = f"User {user_id}"
+                total_xp = sum(calculate_xp_needed(lvl) for lvl in range(1, level)) + xp
                 embed.add_field(
                     name=f'#{rank}: {username}',
-                    value=f'Level {level} - {xp:,} XP',
+                    value=f'Level {level} - {total_xp:,} Total XP',
                     inline=False
                 )
             await ctx.send(embed=embed)
