@@ -285,7 +285,63 @@ def setup(bot):
             await ctx.send(f"Sorry, you lost {bet} coins.")
         bot.db.commit()
 
+    @bot.command()
+    async def work(ctx):
+        '''Work for money!'''
+        user_id = ctx.author.id
+        c = bot.db.cursor()
 
+        # Check last work time
+        c.execute('SELECT balance, last_work FROM balances WHERE user_id = ?', (user_id,))
+        result = c.fetchone()
+
+        import datetime
+        current_time = datetime.datetime.now()
+
+        if not result:
+            c.execute('INSERT INTO balances (user_id, balance, last_work) VALUES (?, ?, ?)',
+                      (user_id, 1000, current_time))
+            bot.db.commit()
+            balance = 1000
+            await ctx.send("Have you been here before? I'll give you a starting balance of 1,000 coins.")
+        else:
+            balance = result[0]
+            last_work = datetime.datetime.strptime(result[1], '%Y-%m-%d %H:%M:%S') if result[1] else None
+
+            if last_work and (current_time - last_work).total_seconds() < 3600:
+                time_left = 3600 - (current_time - last_work).total_seconds()
+                minutes = int(time_left / 60)
+                await ctx.send(f"You need to wait {minutes} minutes before working again!")
+                return
+
+        earnings = random.randint(0, 500)
+        outcome = random.randint(1, 100)
+        phrases_success = [
+            'Dr. Najjar asked you to complete the slides and you got it done in time and they look good!',
+            'You graded 100 assignments in record time!', 'You fixed a critical bug in the codebase and saved the day!',
+            'You lead the lab flawlessly and the students all got their assignment reviewed.',
+            'You organized a successful event for the department!', 'you ate it UP!!!',
+            'You worked your butt of an aced your exams! Congrats!'
+        ]
+
+        phrases_failure = [
+            'You tried to edit the canvas and broke the entire HTML.',
+            'Instead of pushing to the dev branch you pushed to main and now everything is broken.',
+            'youre FIREDDDDDD',
+            'You accidentally deleted the entire project folder.',
+            'You spilled coffee on your keyboard and it stopped working.',
+            'You sent an email to the entire university by mistake.'
+        ]
+        if outcome <= 25:
+            await ctx.send(f"{random.choice(phrases_failure)} \n You lost {earnings} coins.")
+            c.execute('UPDATE balances SET balance = balance - ?, last_work = ? WHERE user_id = ?',
+                      (earnings, current_time, user_id))
+            bot.db.commit()
+        else:
+            await ctx.send(f"{random.choice(phrases_success)} \n You earned {earnings} coins.")
+            c.execute('UPDATE balances SET balance = balance + ?, last_work = ? WHERE user_id = ?',
+                      (earnings, current_time, user_id))
+            bot.db.commit()
     @bot.command()
     async def a_give(ctx, user: discord.Member, amount: int):
         if amount <= 0:
