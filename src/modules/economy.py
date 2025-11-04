@@ -370,7 +370,7 @@ def setup(bot):
 
 
     @bot.command()
-    async def a_take(ctx, user: discord.Member, amount: int):
+    async def a_take(ctx, user: discord.Member, amount: float):
         '''Admin command to take a specified amount of coins from another user.'''
         if amount <= 0:
             await ctx.send("Please enter a positive amount to take.")
