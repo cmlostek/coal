@@ -273,12 +273,12 @@ def setup(bot):
         elif result.count('⭐') == 1 and not (
                 result[0] == result[1] or result[1] == result[2] or result[0] == result[2]):
             # One symbol is a star the other 2 are NOT the same
-            winnings = bet * .3
+            winnings = bet * 3
             c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
             await ctx.send(f"You got a star! You won {winnings} coins!")
         elif result[0] == result[1] or result[1] == result[2] or result[0] == result[2]:
             # Two symbols are the same
-            winnings = bet * .2
+            winnings = bet * 2
             c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
             await ctx.send(f"You got a double! You won {winnings} coins!")
         else:
