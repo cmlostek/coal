@@ -32,7 +32,7 @@ def setup(bot):
             await ctx.send(f'Error accessing balance: {e}')
             print(f'Database error in balance command: {e}')
 
-    @bot.command()
+    @bot.command(alias = 'bal')
     async def daily(ctx):
         user_id = ctx.author.id
         c = bot.db.cursor()
@@ -398,5 +398,33 @@ def setup(bot):
         except sql.Error as e:
             await ctx.send(f"Error processing transaction: {e}")
             print(f"Database error in a_take command: {e}")
+
+    @bot.command()
+    async def rob(ctx, user_id: int):
+        '''Rob another user of a random amount of coins.'''
+        c = bot.db.cursor()
+        c.execute('SELECT balance FROM balances WHERE user_id = ?', (user_id,))
+        result = c.fetchone()
+
+        if not result:
+            await ctx.send("The user you are trying to rob does not have an account!")
+            return
+        else:
+            user_balance = result[0]
+            outcome = random.randint(1, 100)
+            loss = random.randint(100, 1000)
+            if outcome <= 75:
+                await ctx.send(f"You got caught and were sent to jail! You lost {loss} coins.")
+                c.execute('UPDATE balances SET balance = balance - ? WHERE user_id = ?', (loss, ctx.author.id))
+            else:
+                amount = random.randint(1, user_balance)
+                c.execute('UPDATE balances SET balance = balance - ? WHERE user_id = ?', (amount, user_id))
+                c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (amount, ctx.author.id))
+                bot.db.commit()
+                await ctx.send(f"You stole {amount:,} coins from {user_id}'s account!")
+
+
+
+
 
 
