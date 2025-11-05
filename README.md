@@ -48,6 +48,15 @@ A Discord bot with various utility, Minecraft server monitoring, gambling, and g
 - **daily**: Claim your daily reward.
   - Usage: `-daily`
 
+- **work**: Work and see if you get any money
+  - UsageL `-work`
+
+- **rob**: Rob a user.
+  - Usage: `-rob <user>`
+  - Example: `-rob @user`
+  - Note: You can't rob yourself!
+  - Note: You can't rob a user who doesn't exist in the database. Tell them to do `-balance` to add them to the database. 
+
 - **give**: Give coins to another user.
   - Usage: `-give <user> <amount>`
   - Example: `-give @user 100`
