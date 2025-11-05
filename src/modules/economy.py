@@ -236,7 +236,7 @@ def setup(bot):
         if bet <= 0:
             await ctx.send("Please enter a positive amount to bet.")
             return
-        elif bet > 1000:
+        elif bet > 3000:
             await ctx.send("Sorry, I can't bet that much.")
             return
 
