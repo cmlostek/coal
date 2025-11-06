@@ -188,7 +188,6 @@ def setup(bot):
             recent_rows = rows[:10]
             desc_lines = [f'**{r[0]}** - {r[1] or "Rest In Peace :("}' for r in recent_rows]
             reversed_desc_lines = list(reversed(desc_lines))  # Show oldest first in the embed
-            print(desc_lines)
             # try to resolve a nice username for the embed title
             title_user = target_id_for_query
             try:

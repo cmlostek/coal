@@ -1,6 +1,8 @@
 # created by virtualenv automatically
-
+.idea
+.idea/dataSources
 .venv
-.env
-
-db.sqlite3
+coal/.env
+coal/coal_db.sql
+iron/.env
+iron/iron_db.sql

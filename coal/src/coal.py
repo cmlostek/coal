@@ -22,7 +22,7 @@ DB = os.getenv('DATABASE')
 
 # Bot Instance
 
-bot = Bot(command_prefix='-', intents=intents, help_command=None)
+bot = Bot(command_prefix='-' or '!' or '?', intents=intents, help_command=None)
 
 
 # On Ready Event
@@ -90,7 +90,7 @@ async def on_ready():
     print(f'Monitoring Minecraft server: {MINECRAFT_SERVER_IP}')
 
     # Load modules
-    modules = ['utils', 'grave', 'minecraft', 'gambling']
+    modules = ['utils', 'grave', 'minecraft', 'economy', 'levels']
     loaded = 0
     for module in modules:
         try:
@@ -124,3 +124,4 @@ if __name__ == '__main__':
             print("Bot stopped by user.")
         except Exception as e:
             print(f"An unexpected error occurred during bot execution: {e}")
+
