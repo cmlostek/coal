@@ -78,6 +78,9 @@ A Discord bot with various utility, Minecraft server monitoring, gambling, and g
 - **slots**: Play the slot machine.
   - Usage: `-slots <amount>`
 
+- **scracth**: Play the Scratch game.
+  - Usage: `-scratch <amount>`
+
 ## Graveyard Commands
 
 - **death**: Records a player's death.
