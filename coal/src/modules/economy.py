@@ -426,8 +426,73 @@ def setup(bot):
                 bot.db.commit()
                 await ctx.send(f"You stole {amount:,} coins from {user_id}'s account!")
 
+    @bot.command()
+    async def scratch(ctx, bet: int = 100):
+        '''Scratch another user of a random amount of coins.'''
+        '''Rolls a slot machine with a specified number of dice.'''
+        # Get user's balance
+        user_id = ctx.author.id
+        c = bot.db.cursor()
+        c.execute('SELECT balance FROM balances WHERE user_id = ?', (user_id,))
+        result = c.fetchone()
 
+        if not result:
+            c.execute('INSERT INTO balances (user_id, balance) VALUES (?, ?)', (user_id, 1000))
+            bot.db.commit()
+            balance = 1000
+            await ctx.send("Have you been here before? I'll give you a starting balance of 1,000 coins.")
+        else:
+            balance = result[0]
 
+        if balance < bet:
+            await ctx.send("You don't have enough coins for this bet!")
+            return
+
+        if bet <= 0:
+            await ctx.send("Please enter a positive amount to bet.")
+            return
+        elif bet > 3000:
+            await ctx.send("Sorry, I can't bet that much.")
+            return
+
+        # Remove bet amount first
+        c.execute('UPDATE balances SET balance = balance - ? WHERE user_id = ?', (bet, user_id))
+        bot.db.commit()
+
+        symbols = ['⭐', '🍒', '🍋', '🍊', '🍉', '7️⃣', '💰', '💎', '💵']
+        result = []
+        for _ in range(3):
+            symbols_copy = symbols.copy()
+            random.shuffle(symbols_copy)
+            result.append(f"||{symbols_copy[0]}||")
+        await ctx.send(f"🎰 Slot machine result: {' | '.join(result)}")
+
+        if result.count('⭐') == 3:
+            # jackpot
+            winnings = bet * 100
+            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
+        elif result.count('⭐') == 0 and result[0] == result[1] == result[2]:
+            # All three symbols are the same and NOT stars
+            winnings = bet * 50
+            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
+        elif result.count('⭐') == 1 and (result[0] == result[1] or result[1] == result[2] or result[0] == result[2]):
+            # Two symbols are the same and one is a star
+            winnings = bet * 10
+            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
+        elif result.count('⭐') == 2 and len(set(result)) == 2:
+            # 2 symbols are stars and the third does not matter
+            winnings = bet * 5
+            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
+        elif result.count('⭐') == 1 and not (
+                result[0] == result[1] or result[1] == result[2] or result[0] == result[2]):
+            # One symbol is a star the other 2 are NOT the same
+            winnings = bet * 3
+            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
+        elif result[0] == result[1] or result[1] == result[2] or result[0] == result[2]:
+            # Two symbols are the same
+            winnings = bet * 2
+            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
+        bot.db.commit()
 
 
 
