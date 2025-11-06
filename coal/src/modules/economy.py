@@ -203,13 +203,14 @@ def setup(bot):
         bot.db.commit()
 
         rolls = [random.randint(1, 6) for _ in range(number_of_dice)]
-        if sum(rolls) >= (number_of_dice * 3):
+        result = number_of_dice * random.randint(1, 4)
+        if sum(rolls) >= result:
             # Add winnings if won
             c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (bet * 6, user_id))
             await ctx.send(f"Congratulations! You won {bet * 5} coins!")
         else:
             await ctx.send(
-                f"You rolled {rolls} which has a sum of {sum(rolls)} which does not meet the score and lost {bet} coins.")
+                f"You rolled {rolls} which has a sum of {sum(rolls)} which does not meet the score {result} and lost {bet} coins.")
         bot.db.commit()
 
     @bot.command()
