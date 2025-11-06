@@ -15,7 +15,7 @@ def setup(bot):
         args: Optional first arg is the id (mention or digits). If omitted, uses the command invoker. Any remaining args are joined as the reason.
         '''
         # IMPORTANT: Replace with your actual death channel ID
-        death_channel_id = 1422284082955685888
+        death_channel_id = 1436031058469716058
         death_channel = bot.get_channel(death_channel_id)
         if not death_channel:
             await ctx.send(f"Error: Death channel with ID {death_channel_id} not found.")
