@@ -247,7 +247,9 @@ def setup(bot):
         symbols = ['⭐', '🍒', '🍋', '🍊', '🍉', '7️⃣', '💰', '💎', '💵']
         result = []
         for _ in range(3):
-            result.append(random.choice(symbols))
+            symbols_copy = symbols.copy()
+            random.shuffle(symbols_copy)
+            result.append(symbols_copy[0])
         await ctx.send(f"🎰 Slot machine result: {' | '.join(result)}")
 
         if result.count('⭐') == 3:
