@@ -13,7 +13,7 @@ def setup(bot):
 
     MINECRAFT_SERVER_IP = os.getenv('MINECRAFT_SERVER_IP')
     MINECRAFT_SERVER_PORT = os.getenv('MINECRAFT_SERVER_PORT')
-    VOICE_CHANNEL = 1422645848923176990  # Replace this with your test channel ID
+    # Replace this with your test channel ID
 
     async def get_server_status():
         """Query the Minecraft server and return status information."""
