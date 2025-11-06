@@ -2,6 +2,7 @@
 .idea
 .idea/dataSources
 .venv
-.env
-
-db.sql
+coal/.env
+coal/coal_db.sql
+iron/.env
+iron/iron_db.sql
