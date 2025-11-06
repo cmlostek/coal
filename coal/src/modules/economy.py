@@ -465,7 +465,7 @@ def setup(bot):
             symbols_copy = symbols.copy()
             random.shuffle(symbols_copy)
             result.append(f"||{symbols_copy[0]}||")
-        await ctx.send(f"You bought a scratch off ticket: {' | '.join(result)} for {bet} coins!")
+        await ctx.send(f"🎟️Scratch Off {' | '.join(result)} for {bet} coins!")
 
         if result.count('⭐') == 3:
             # jackpot
