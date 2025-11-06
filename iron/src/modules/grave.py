@@ -79,9 +79,7 @@ def setup(bot):
         Revives a user by removing their most recent death from the graveyard.
         :user_id The ID of the user to revive (mention or digits).
         '''
-        test_channel_id = 1431021412050538517
-        test_channel = bot.get_channel(test_channel_id)
-        death_channel_id = 1422284082955685888
+        death_channel_id = 1436031058469716058
         death_channel = bot.get_channel(death_channel_id)
         if not death_channel:
             await ctx.send(f"Error: Death channel with ID {death_channel_id} not found.")
