@@ -465,33 +465,41 @@ def setup(bot):
             symbols_copy = symbols.copy()
             random.shuffle(symbols_copy)
             result.append(f"||{symbols_copy[0]}||")
-        await ctx.send(f"🎰 Slot machine result: {' | '.join(result)}")
+        await ctx.send(f"You bought a scratch off ticket: {' | '.join(result)} for {bet} coins!")
 
         if result.count('⭐') == 3:
             # jackpot
             winnings = bet * 100
             c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
+            await ctx.send(f"||You got a JACKPOT! You won {winnings} coins!||")
         elif result.count('⭐') == 0 and result[0] == result[1] == result[2]:
             # All three symbols are the same and NOT stars
             winnings = bet * 50
             c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
+            await ctx.send(f"||Congratulations! You won {winnings} coins!||")
         elif result.count('⭐') == 1 and (result[0] == result[1] or result[1] == result[2] or result[0] == result[2]):
             # Two symbols are the same and one is a star
             winnings = bet * 10
             c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
+            await ctx.send(f"||You got a match with a wild! You won {winnings} coins!||")
         elif result.count('⭐') == 2 and len(set(result)) == 2:
             # 2 symbols are stars and the third does not matter
             winnings = bet * 5
             c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
+            await ctx.send(f"||You got two stars! You won {winnings} coins!||")
         elif result.count('⭐') == 1 and not (
                 result[0] == result[1] or result[1] == result[2] or result[0] == result[2]):
             # One symbol is a star the other 2 are NOT the same
             winnings = bet * 3
             c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
+            await ctx.send(f"||You got a star! You won {winnings} coins!||")
         elif result[0] == result[1] or result[1] == result[2] or result[0] == result[2]:
             # Two symbols are the same
             winnings = bet * 2
             c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
+            await ctx.send(f"||You got a double! You won {winnings} coins!||")
+        else:
+            await ctx.send(f"||Sorry, you lost {bet} coins.||")
         bot.db.commit()
 
 
