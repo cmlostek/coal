@@ -1,11 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="DataSourceManagerImpl" format="xml" multifile-model="true">
-    <data-source source="LOCAL" name="db.sql" uuid="f15a25e6-8349-491a-b23f-fb623e82c43d">
+    <data-source source="LOCAL" name="iron_db.sql" uuid="e945b6fa-7e1d-4fa9-8c36-3931508e9391">
       <driver-ref>sqlite.xerial</driver-ref>
       <synchronize>true</synchronize>
       <jdbc-driver>org.sqlite.JDBC</jdbc-driver>
-      <jdbc-url>jdbc:sqlite:$PROJECT_DIR$/src/db.sql</jdbc-url>
+      <jdbc-url>jdbc:sqlite:$PROJECT_DIR$/iron/iron_db.sql</jdbc-url>
+      <working-dir>$ProjectFileDir$</working-dir>
+    </data-source>
+    <data-source source="LOCAL" name="coal_db.sql" uuid="bc712845-9385-4bb8-b9d6-6af10a8d2c1a">
+      <driver-ref>sqlite.xerial</driver-ref>
+      <synchronize>true</synchronize>
+      <jdbc-driver>org.sqlite.JDBC</jdbc-driver>
+      <jdbc-url>jdbc:sqlite:$PROJECT_DIR$/coal/coal_db.sql</jdbc-url>
       <working-dir>$ProjectFileDir$</working-dir>
     </data-source>
   </component>
