@@ -78,7 +78,9 @@ def setup(bot):
             embed.add_field(name="Level", value=str(level), inline=True)
             embed.add_field(name="Level Progress", value=f"{xp:,}/{xp_needed:,}", inline=True)
             embed.add_field(name="Total XP", value=f"{total_xp:,}", inline=True)
-            embed.add_field(name="XP Bar", value=f"[{'█' * int((xp / xp_needed) * 10):<10}]", inline=True)
+            embed.add_field(name="XP Bar",
+                            value=f"[{'█' * int((xp / xp_needed) * 10)}{'█' * (10 - int((xp / xp_needed) * 10))}]",
+                            inline=True)
 
             embed.set_thumbnail(url=user.display_avatar.url)
             await ctx.send(embed=embed)
