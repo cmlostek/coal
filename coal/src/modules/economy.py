@@ -451,9 +451,6 @@ def setup(bot):
         if bet <= 0:
             await ctx.send("Please enter a positive amount to bet.")
             return
-        elif bet > 3000:
-            await ctx.send("Sorry, I can't bet that much.")
-            return
 
         # Remove bet amount first
         c.execute('UPDATE balances SET balance = balance - ? WHERE user_id = ?', (bet, user_id))
