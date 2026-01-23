@@ -1,13 +1,14 @@
 import aiohttp
 import discord
 from discord.ext import commands
-import dotenv
+from dotenv import load_dotenv
+import os
 
-
+load_dotenv()
 def setup(bot):
     @bot.command(name="weather", description="Get the current weather for a specified city.")
     async def weather(ctx, city: str):
-        api_key = dotenv.get_key('.env', 'OPENWEATHER_API_KEY')
+        api_key = os.getenv("OPENWEATHER_API_KEY")
         base_url = "http://api.openweathermap.org/data/2.5/weather"
         params = {
             "q": city,
