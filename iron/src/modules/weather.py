@@ -1,36 +1,43 @@
+import os
 import aiohttp
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
-import os
 
+# Load it here, at the very top level of the file
 load_dotenv()
-def setup(bot):
-    @bot.command(name="weather", description="Get the current weather for a specified city.")
-    async def weather(ctx, city: str):
+
+
+async def setup(bot):
+    # This check will tell you EXACTLY if the key is missing in your console
+    key = os.getenv("OPENWEATHER_API_KEY")
+    if not key:
+        print("⚠️ WARNING: OPENWEATHER_API_KEY is still None. Check your .env file!")
+
+    @bot.command(name="weather")
+    async def weather(ctx, *, city: str):  # Use *, city to allow spaces in city names
         api_key = os.getenv("OPENWEATHER_API_KEY")
-        base_url = "http://api.openweathermap.org/data/2.5/weather"
+
+        # Guard clause to prevent the 'NoneType' crash
+        if api_key is None:
+            return await ctx.send("Bot configuration error: API Key missing.")
+
+        url = "http://api.openweathermap.org/data/2.5/weather"
         params = {
             "q": city,
             "appid": api_key,
-            "units": 'imperial'
+            "units": "metric"
         }
 
-        # Using aiohttp for non-blocking requests
         async with aiohttp.ClientSession() as session:
-            async with session.get(base_url, params=params) as response:
-                if response.status == 200:
-                    data = await response.json()
-                    main = data["main"]
-                    weather_desc = data["weather"][0]["description"]
-
-                    weather_info = (
-                        f"**Weather in {city.title()}**\n"
-                        f"Temperature: {main['temp']}°C\n"
-                        f"Humidity: {main['humidity']}%\n"
-                        f"Description: {weather_desc.capitalize()}"
-                    )
+            async with session.get(url, params=params) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    temp = data["main"]["temp"]
+                    desc = data["weather"][0]["description"]
+                    await ctx.send(f"The weather in {city.title()} is {temp}°C with {desc}.")
                 else:
-                    weather_info = f"City '{city}' not found or API error."
+                    await ctx.send(f"Could not find weather for '{city}'.")
 
-        await ctx.send(weather_info)
+    # Add the command to the bot explicitly if setup() isn't auto-registering
+    bot.add_command(weather)
