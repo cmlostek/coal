@@ -1,127 +1,236 @@
-# Imports
-
 import discord
+from discord.ext import commands
+import aiosqlite
 import os
-import sqlite3 as sql
+import asyncio
+import logging
 from dotenv import load_dotenv
-from discord.ext.commands import Bot
-from mcstatus import JavaServer
-
-# Bot Intents
-
-intents = discord.Intents.default()
-intents.message_content = True  # Enable the message content intent
-
-# Bot Params
 
 load_dotenv()
-TOKEN = os.getenv('DISCORD_TOKEN')
-MINECRAFT_SERVER_IP = os.getenv('MINECRAFT_SERVER_IP')
-MINECRAFT_SERVER_PORT = os.getenv('MINECRAFT_SERVER_PORT')
-DB = os.getenv('DATABASE')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
+log = logging.getLogger('iron')
 
-# Bot Instance
+MODULES = [
+    'modules.setup',
+    'modules.tasks',
+    'modules.reminders',
+    'modules.tags',
+    'modules.calendar_module',
+    'modules.canvas_module',
+    'modules.email_module',
+    'modules.weather',
+    'modules.stats',
+    'modules.daily_digest',
+    'modules.economy',
+    'modules.grave',
+    'modules.levels',
+    'modules.minecraft',
+    'modules.utils',
+]
 
-bot = Bot(command_prefix='-' or '!' or '?', intents=intents, help_command=None)
+DB_TABLES = [
+    # ── Legacy tables ────────────────────────────────────────────────────────
+    '''CREATE TABLE IF NOT EXISTS death_log (
+        log_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id  TEXT,
+        cntr     INTEGER,
+        reason   TEXT
+    )''',
+    '''CREATE TABLE IF NOT EXISTS balances (
+        user_id    INTEGER PRIMARY KEY,
+        balance    INTEGER DEFAULT 1000,
+        last_daily TEXT,
+        last_work  TEXT
+    )''',
+    '''CREATE TABLE IF NOT EXISTS levels (
+        id    INTEGER PRIMARY KEY,
+        level INTEGER DEFAULT 1,
+        xp    INTEGER DEFAULT 0
+    )''',
+    # ── Guild config ─────────────────────────────────────────────────────────
+    '''CREATE TABLE IF NOT EXISTS guild_config (
+        guild_id              INTEGER PRIMARY KEY,
+        prefix                TEXT    DEFAULT '!',
+        daily_digest_channel  INTEGER,
+        reminder_channel      INTEGER,
+        digest_time           TEXT    DEFAULT '08:00',
+        timezone              TEXT    DEFAULT 'America/New_York',
+        weather_location      TEXT,
+        setup_complete        INTEGER DEFAULT 0
+    )''',
+    # ── Tasks ────────────────────────────────────────────────────────────────
+    '''CREATE TABLE IF NOT EXISTS tasks (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id      INTEGER NOT NULL,
+        guild_id     INTEGER NOT NULL,
+        title        TEXT    NOT NULL,
+        description  TEXT,
+        due_date     TEXT,
+        priority     TEXT DEFAULT 'medium',
+        status       TEXT DEFAULT 'pending',
+        created_at   TEXT DEFAULT CURRENT_TIMESTAMP,
+        completed_at TEXT,
+        tag          TEXT
+    )''',
+    # ── Class assignments ────────────────────────────────────────────────────
+    '''CREATE TABLE IF NOT EXISTS assignments (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id      INTEGER NOT NULL,
+        guild_id     INTEGER NOT NULL,
+        title        TEXT    NOT NULL,
+        course       TEXT    NOT NULL,
+        description  TEXT,
+        due_date     TEXT    NOT NULL,
+        points       INTEGER,
+        status       TEXT DEFAULT 'pending',
+        grade        TEXT,
+        source       TEXT DEFAULT 'manual',
+        canvas_id    TEXT,
+        created_at   TEXT DEFAULT CURRENT_TIMESTAMP,
+        completed_at TEXT
+    )''',
+    # ── Reminders ────────────────────────────────────────────────────────────
+    '''CREATE TABLE IF NOT EXISTS reminders (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id    INTEGER NOT NULL,
+        guild_id   INTEGER NOT NULL,
+        channel_id INTEGER NOT NULL,
+        message    TEXT    NOT NULL,
+        remind_at  TEXT    NOT NULL,
+        created_at TEXT    DEFAULT CURRENT_TIMESTAMP,
+        sent       INTEGER DEFAULT 0
+    )''',
+    # ── Tags ─────────────────────────────────────────────────────────────────
+    '''CREATE TABLE IF NOT EXISTS tags (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id   INTEGER NOT NULL,
+        name       TEXT    NOT NULL,
+        content    TEXT    NOT NULL,
+        owner_id   INTEGER NOT NULL,
+        uses       INTEGER DEFAULT 0,
+        created_at TEXT    DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(guild_id, name)
+    )''',
+    # ── Google Calendar config (per user) ────────────────────────────────────
+    '''CREATE TABLE IF NOT EXISTS calendar_config (
+        user_id     INTEGER PRIMARY KEY,
+        credentials TEXT,
+        calendar_id TEXT DEFAULT 'primary'
+    )''',
+    # ── Canvas config (per user) ─────────────────────────────────────────────
+    '''CREATE TABLE IF NOT EXISTS canvas_config (
+        user_id    INTEGER PRIMARY KEY,
+        api_key    TEXT,
+        canvas_url TEXT
+    )''',
+    # ── Email / IMAP config (per user) ──────────────────────────────────────
+    '''CREATE TABLE IF NOT EXISTS email_config (
+        user_id      INTEGER PRIMARY KEY,
+        email_addr   TEXT,
+        app_password TEXT,
+        imap_server  TEXT DEFAULT 'imap.gmail.com',
+        sleep_start  TEXT DEFAULT '22:00',
+        sleep_end    TEXT DEFAULT '07:00'
+    )''',
+    # ── Task completion stats ─────────────────────────────────────────────────
+    '''CREATE TABLE IF NOT EXISTS task_stats (
+        id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id                INTEGER NOT NULL,
+        guild_id               INTEGER NOT NULL,
+        date                   TEXT    NOT NULL,
+        tasks_completed        INTEGER DEFAULT 0,
+        tasks_on_time          INTEGER DEFAULT 0,
+        tasks_late             INTEGER DEFAULT 0,
+        assignments_completed  INTEGER DEFAULT 0
+    )''',
+]
 
 
-# On Ready Event
+class IronBot(commands.Bot):
+    def __init__(self):
+        intents = discord.Intents.default()
+        intents.message_content = True
+        intents.members = True
+        super().__init__(
+            command_prefix=commands.when_mentioned_or('!', '-', '?'),
+            intents=intents,
+            help_command=None,
+        )
 
-@bot.event
-async def on_ready():
-    print(f'We have logged in as {bot.user}')
+    async def setup_hook(self):
+        db_path = os.getenv('DATABASE', 'iron_db.db')
+        self.db = await aiosqlite.connect(db_path)
+        self.db.row_factory = aiosqlite.Row
+        await self._init_db()
 
-    # Initialize the database connection and ensure tables exist
-    bot.db = sql.connect(DB, check_same_thread=False)
-    print(f'Connected to database: {DB}')
+        for module in MODULES:
+            try:
+                await self.load_extension(module)
+                log.info('Loaded: %s', module)
+            except Exception as exc:
+                log.error('Failed to load %s: %s', module, exc, exc_info=True)
 
-    # Ensure the death_log table exists
-    c = bot.db.cursor()
+    async def _init_db(self):
+        async with self.db.cursor() as cur:
+            for sql in DB_TABLES:
+                await cur.execute(sql)
+        await self.db.commit()
+        log.info('Database initialised.')
+
+    async def on_ready(self):
+        log.info('Logged in as %s (ID %s)', self.user, self.user.id)
+        await self.change_presence(
+            activity=discord.Activity(
+                type=discord.ActivityType.watching,
+                name='your productivity | !help',
+            )
+        )
+
+    async def on_command_error(self, ctx, error):
+        if isinstance(error, commands.CommandNotFound):
+            return
+        if isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send(
+                embed=discord.Embed(
+                    description=f'Missing argument: `{error.param.name}`. '
+                                f'Run `!help {ctx.command}` for usage.',
+                    color=discord.Color.red(),
+                )
+            )
+        elif isinstance(error, commands.BadArgument):
+            await ctx.send(
+                embed=discord.Embed(
+                    description=f'Invalid argument. Run `!help {ctx.command}` for usage.',
+                    color=discord.Color.red(),
+                )
+            )
+        elif isinstance(error, commands.CheckFailure):
+            await ctx.send(
+                embed=discord.Embed(
+                    description="You don't have permission to use that command.",
+                    color=discord.Color.red(),
+                )
+            )
+        else:
+            log.error('Unhandled error in %s: %s', ctx.command, error, exc_info=error)
+
+    async def close(self):
+        await self.db.close()
+        await super().close()
 
 
-    # Check if death_log table exists
-    c.execute('''SELECT count(name)
-                 FROM sqlite_master
-                 WHERE type = 'table'
-                   AND name = 'death_log' ''')
-    if c.fetchone()[0] == 0:
-        c.execute('''
-                  CREATE TABLE IF NOT EXISTS death_log
-                  (
-                      log_id
-                      INTEGER
-                      PRIMARY
-                      KEY
-                      AUTOINCREMENT,
-                      user_id
-                      TEXT,
-                      cntr
-                      INTEGER,
-                      reason
-                      TEXT
-                  )
-                  ''')
-        print('Created table: death_log')
+def main():
+    token = os.getenv('DISCORD_TOKEN')
+    if not token:
+        raise RuntimeError('DISCORD_TOKEN is not set in the environment.')
+    bot = IronBot()
+    try:
+        bot.run(token, log_handler=None)
+    except discord.errors.LoginFailure:
+        log.critical('Invalid token. Check your DISCORD_TOKEN.')
+    except KeyboardInterrupt:
+        log.info('Bot stopped by user.')
 
-    # Check if balances table exists
-    c.execute('''SELECT count(name)
-                 FROM sqlite_master
-                 WHERE type = 'table'
-                   AND name = 'balances' ''')
-    if c.fetchone()[0] == 0:
-        c.execute('''
-                  CREATE TABLE IF NOT EXISTS balances
-                  (
-                      user_id
-                      INTEGER
-                      PRIMARY
-                      KEY,
-                      balance
-                      INTEGER
-                      DEFAULT
-                      1000
-                  )
-                  ''')
-        print('Created table: balances')
-    bot.db.commit()
-
-
-    print(f'{bot.user} has connected to Discord!')
-    print(f'Monitoring Minecraft server: {MINECRAFT_SERVER_IP}')
-
-    # Load modules
-    modules = ['utils', 'grave', 'minecraft', 'economy', 'levels', 'weather']
-    loaded = 0
-    for module in modules:
-        try:
-            # Import the module dynamically
-            mod = __import__(f'modules.{module}', fromlist=['setup'])
-            mod.setup(bot)
-            print(f'Loaded module: {module}')
-            loaded += 1
-        except Exception as e:
-            print(f'Failed to load module {module}: {e}')
-    if loaded == 0:
-        print('No modules loaded.')
-    elif loaded == len(modules):
-        print('All modules loaded.')
-    else:
-        print(f'Loaded {loaded} out of {len(modules)} modules.')
-
-    print(f'{bot.user} has connected to Discord! All databases loaded. All Modules loaded. Ready to go!')
-
-# Run the bot
 
 if __name__ == '__main__':
-    if not TOKEN or not MINECRAFT_SERVER_IP:
-        print("Error: Your bot token or Minecraft server address are not set. Please check your environment variables.")
-    else:
-        try:
-            bot.run(TOKEN)
-        except discord.errors.LoginFailure:
-            print("Error: Improper token has been passed. Please check your DISCORD_TOKEN.")
-        except KeyboardInterrupt:
-            print("Bot stopped by user.")
-        except Exception as e:
-            print(f"An unexpected error occurred during bot execution: {e}")
-
+    main()
