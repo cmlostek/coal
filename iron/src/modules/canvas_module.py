@@ -274,14 +274,24 @@ class Canvas(commands.Cog):
         if not items:
             return await ctx.send('No grade data available.')
 
-        embed = discord.Embed(
-            title=f'📊 Canvas Grades{" — " + course_filter if course_filter else ""}',
-            color=0xE66000,
-        )
-        for cname, score, grade in items:
-            grade_str = f'{grade} ({score}%)' if score is not None else '*(no grade)*'
-            embed.add_field(name=cname, value=grade_str, inline=True)
-        await ctx.send(embed=embed)
+        title = f'📊 Canvas Grades{" — " + course_filter if course_filter else ""}'
+        # Discord caps embed fields at 25 — split into pages
+        pages = []
+        for i in range(0, len(items), 25):
+            chunk = items[i:i + 25]
+            embed = discord.Embed(title=title, color=0xE66000)
+            for cname, score, grade in chunk:
+                grade_str = f'{grade} ({score}%)' if score is not None else '*(no grade)*'
+                embed.add_field(name=cname[:256], value=grade_str, inline=True)
+            embed.set_footer(text=f'Page {i // 25 + 1} of {(len(items) - 1) // 25 + 1} • {len(items)} courses')
+            pages.append(embed)
+
+        if len(pages) == 1:
+            await ctx.send(embed=pages[0])
+        else:
+            # Simple multi-embed send (one message per page)
+            for page in pages:
+                await ctx.send(embed=page)
 
     @canvas.command(name='sync')
     async def canvas_sync(self, ctx):
