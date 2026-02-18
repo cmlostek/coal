@@ -1,432 +1,340 @@
-"""Economy commands module"""
-
+"""modules/economy.py – Economy / currency system (Cog version)."""
 import random
 import discord
-from discord import user
 from discord.ext import commands
-import sqlite3 as sql
+from datetime import datetime
 
 
-def setup(bot):
-    """Setup function to register commands with the bot"""
+class Economy(commands.Cog):
+    """Coins, gambling, and the server economy."""
 
-    @bot.command()
-    async def balance(ctx, user: discord.Member = None):
-        user_id = user.id if user else ctx.author.id
+    def __init__(self, bot):
+        self.bot = bot
 
-        try:
-            c = bot.db.cursor()
-            c.execute('SELECT balance FROM balances WHERE user_id = ?', (user_id,))
-            result = c.fetchone()
+    # ── Internal helpers ──────────────────────────────────────────────────────
 
-            if result:
-                balance = result[0]
-                await ctx.send(f'Your current balance is: 💰 {balance:,} coins')
-            else:
-                # Initialize new user with starting balance of 1000
-                c.execute('INSERT INTO balances (user_id, balance) VALUES (?, ?)', (user_id, 1000))
-                bot.db.commit()
-                await ctx.send('Welcome! Your starting balance is: 💰 1,000 coins')
+    async def _get_balance(self, user_id: int) -> int:
+        async with self.bot.db.cursor() as cur:
+            await cur.execute('SELECT balance FROM balances WHERE user_id = ?', (user_id,))
+            row = await cur.fetchone()
+            if row:
+                return row['balance']
+            await cur.execute('INSERT INTO balances (user_id, balance) VALUES (?, 1000)', (user_id,))
+        await self.bot.db.commit()
+        return 1000
 
-        except sql.Error as e:
-            await ctx.send(f'Error accessing balance: {e}')
-            print(f'Database error in balance command: {e}')
+    async def _add_balance(self, user_id: int, amount: int):
+        await self._get_balance(user_id)  # ensure row exists
+        async with self.bot.db.cursor() as cur:
+            await cur.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (amount, user_id))
+        await self.bot.db.commit()
 
-    @bot.command(alias = 'bal')
-    async def daily(ctx):
-        user_id = ctx.author.id
-        c = bot.db.cursor()
-        c.execute('SELECT balance, last_daily FROM balances WHERE user_id = ?', (user_id,))
-        result = c.fetchone()
+    # ── Commands ──────────────────────────────────────────────────────────────
 
-        if not result:
-            await ctx.send("Please run `-balance` first to initialize your account!")
-            return
+    @commands.command(name='balance', aliases=['bal'])
+    async def balance(self, ctx, user: discord.Member = None):
+        """Check your or another user's coin balance."""
+        target = user or ctx.author
+        bal = await self._get_balance(target.id)
+        embed = discord.Embed(
+            title=f'💰 {target.display_name}\'s Balance',
+            description=f'**{bal:,}** coins',
+            color=discord.Color.gold(),
+        )
+        await ctx.send(embed=embed)
 
-        import datetime
-        current_time = datetime.datetime.now().date()
-        last_daily = datetime.datetime.strptime(result[1], '%Y-%m-%d').date() if result[1] else None
+    @commands.command(name='daily')
+    async def daily(self, ctx):
+        """Claim your daily 500-coin reward."""
+        uid = ctx.author.id
+        async with self.bot.db.cursor() as cur:
+            await cur.execute('SELECT balance, last_daily FROM balances WHERE user_id = ?', (uid,))
+            row = await cur.fetchone()
 
-        if last_daily and current_time <= last_daily:
-            await ctx.send("You've already claimed your daily reward today! Come back tomorrow!")
-            return
+        if not row:
+            await self._get_balance(uid)
+            async with self.bot.db.cursor() as cur:
+                await cur.execute('SELECT balance, last_daily FROM balances WHERE user_id = ?', (uid,))
+                row = await cur.fetchone()
 
-        daily_amount = 500
-        c.execute('UPDATE balances SET balance = balance + ?, last_daily = ? WHERE user_id = ?',
-                  (daily_amount, current_time.strftime('%Y-%m-%d'), user_id))
-        await ctx.send(f"You've received your daily reward of {daily_amount:,} coins!")
-        bot.db.commit()
+        today = datetime.now().date()
+        last_daily = datetime.strptime(row['last_daily'], '%Y-%m-%d').date() if row['last_daily'] else None
 
-        bot.db.commit()
-            
+        if last_daily and today <= last_daily:
+            return await ctx.send(embed=discord.Embed(
+                description='You already claimed your daily today. Come back tomorrow!',
+                color=discord.Color.red(),
+            ))
 
-    @bot.command()
-    async def leaderboard(ctx):
-        try:
-            c = bot.db.cursor()
-            c.execute('SELECT user_id, balance FROM balances ORDER BY balance DESC')
-            results = c.fetchall()
-
-            if not results:
-                await ctx.send("No balances found!")
-                return
-
-            embed = discord.Embed(
-                title="💰 Wealth Leaderboard",
-                description="Top balances in the server",
-                color=discord.Color.gold()
+        amount = 500
+        async with self.bot.db.cursor() as cur:
+            await cur.execute(
+                'UPDATE balances SET balance = balance + ?, last_daily = ? WHERE user_id = ?',
+                (amount, today.strftime('%Y-%m-%d'), uid),
             )
+        await self.bot.db.commit()
+        await ctx.send(embed=discord.Embed(
+            description=f'💰 You claimed **{amount:,}** coins! Come back tomorrow for more.',
+            color=discord.Color.gold(),
+        ))
 
-            for i, (user_id, balance) in enumerate(results[:10], 1):
-                try:
-                    user = await bot.fetch_user(user_id)
-                    username = user.name
-                except:
-                    username = f"User {user_id}"
+    @commands.command(name='leaderboard', aliases=['richest'])
+    async def leaderboard(self, ctx):
+        """Top 10 richest users."""
+        async with self.bot.db.cursor() as cur:
+            await cur.execute('SELECT user_id, balance FROM balances ORDER BY balance DESC LIMIT 10')
+            rows = await cur.fetchall()
 
-                medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
-                embed.add_field(
-                    name=f"{medal} {username}",
-                    value=f"{balance:,} coins",
-                    inline=False
-                )
+        if not rows:
+            return await ctx.send('No balances recorded yet.')
 
-            embed.set_footer(text=f"Requested by {ctx.author.name}")
-            await ctx.send(embed=embed)
+        medals = ['🥇', '🥈', '🥉'] + ['🏅'] * 7
+        embed = discord.Embed(title='💰 Wealth Leaderboard', color=discord.Color.gold())
+        for i, row in enumerate(rows):
+            try:
+                user = ctx.guild.get_member(row['user_id']) or await self.bot.fetch_user(row['user_id'])
+                name = user.display_name
+            except Exception:
+                name = f'User {row["user_id"]}'
+            embed.add_field(name=f'{medals[i]} {name}', value=f'{row["balance"]:,} coins', inline=False)
+        embed.set_footer(text=f'Requested by {ctx.author.display_name}')
+        await ctx.send(embed=embed)
 
-        except sql.Error as e:
-            await ctx.send(f"Error accessing leaderboard: {e}")
-            print(f"Database error in leaderboard command: {e}")
-
-    @bot.command()
-    async def give(ctx, user: discord.Member, amount: int):
-        '''Gives a specified amount of coins to another user.'''
+    @commands.command(name='give')
+    async def give(self, ctx, user: discord.Member, amount: int):
+        """Transfer coins to another user."""
         if ctx.author.id == user.id:
-            await ctx.send("You can't give yourself coins!")
-            return
-
+            return await ctx.send('You cannot give coins to yourself.')
         if amount <= 0:
-            await ctx.send("Please enter a positive amount to give.")
-            return
+            return await ctx.send('Amount must be positive.')
+        bal = await self._get_balance(ctx.author.id)
+        if bal < amount:
+            return await ctx.send(f'You only have **{bal:,}** coins.')
+        await self._get_balance(user.id)
+        async with self.bot.db.cursor() as cur:
+            await cur.execute('UPDATE balances SET balance = balance - ? WHERE user_id = ?', (amount, ctx.author.id))
+            await cur.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (amount, user.id))
+        await self.bot.db.commit()
+        await ctx.send(embed=discord.Embed(
+            description=f'💸 Transferred **{amount:,}** coins to {user.mention}.',
+            color=discord.Color.green(),
+        ))
 
-        user_id = ctx.author.id
-        target_id = user.id
-
-        try:
-            c = bot.db.cursor()
-            # Check sender's balance
-            c.execute('SELECT balance FROM balances WHERE user_id = ?', (user_id,))
-            sender_balance = c.fetchone()
-
-            if not sender_balance or sender_balance[0] < amount:
-                await ctx.send("You don't have enough coins!")
-                return
-
-            # Check if recipient exists in database
-            c.execute('SELECT balance FROM balances WHERE user_id = ?', (target_id,))
-            recipient_balance = c.fetchone()
-
-            if not recipient_balance:
-                # Initialize recipient with starting balance
-                c.execute('INSERT INTO balances (user_id, balance) VALUES (?, ?)', (target_id, 1000))
-
-            # Perform the transaction
-            c.execute('UPDATE balances SET balance = balance - ? WHERE user_id = ?', (amount, user_id))
-            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (amount, target_id))
-            bot.db.commit()
-
-            await ctx.send(f"Successfully transferred {amount:,} coins to {user.name}!")
-
-        except sql.Error as e:
-            await ctx.send(f"Error processing transaction: {e}")
-            print(f"Database error in give command: {e}")
-
-    @bot.command()
-    async def coinflip(ctx, flip, bet=100):
-        '''Flips a coin and returns the result.'''
-        user_id = ctx.author.id
-        c = bot.db.cursor()
-        c.execute('SELECT balance FROM balances WHERE user_id = ?', (user_id,))
-        result = c.fetchone()
-
-        if not result:
-            c.execute('INSERT INTO balances (user_id, balance) VALUES (?, ?)', (user_id, 1000))
-            bot.db.commit()
-            balance = 1000
-            await ctx.send("Have you been here before? I'll give you a starting balance of 1,000 coins.")
-        else:
-            balance = result[0]
-
-        if balance < bet:
-            await ctx.send("You don't have enough coins for this bet!")
-            return
-
-        # Remove bet amount first
-        c.execute('UPDATE balances SET balance = balance - ? WHERE user_id = ?', (bet, user_id))
-        bot.db.commit()
+    @commands.command(name='coinflip', aliases=['cf'])
+    async def coinflip(self, ctx, guess: str, bet: int = 100):
+        """Guess heads or tails. Win 2x on correct guess."""
+        guess = guess.lower()
+        if guess not in ('heads', 'tails', 'h', 't'):
+            return await ctx.send('Guess must be `heads` or `tails`.')
+        guess = 'heads' if guess in ('heads', 'h') else 'tails'
+        if bet <= 0:
+            return await ctx.send('Bet must be positive.')
+        bal = await self._get_balance(ctx.author.id)
+        if bal < bet:
+            return await ctx.send(f'You only have **{bal:,}** coins.')
 
         result = random.choice(['heads', 'tails'])
-        if flip.lower() == result:
-            # Add winnings if won
-            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (bet * 2, user_id))
-            await ctx.send(f"The coin landed on: **{result}**\nYou won {bet} coins!")
-        else:
-            await ctx.send(f"The coin landed on: **{result}**\nYou lost {bet} coins!")
-        bot.db.commit()
+        won = guess == result
+        delta = bet if won else -bet
 
-    @bot.command()
-    async def roll(ctx, number_of_dice: int = 1, bet=100):
-        '''Rolls a dice with a specified number of sides.'''
-        user_id = ctx.author.id
-        c = bot.db.cursor()
-        c.execute('SELECT balance FROM balances WHERE user_id = ?', (user_id,))
-        result = c.fetchone()
+        async with self.bot.db.cursor() as cur:
+            await cur.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (delta, ctx.author.id))
+        await self.bot.db.commit()
 
-        if not result:
-            c.execute('INSERT INTO balances (user_id, balance) VALUES (?, ?)', (user_id, 1000))
-            bot.db.commit()
-            balance = 1000
-            await ctx.send("Have you been here before? I'll give you a starting balance of 1,000 coins.")
-        else:
-            balance = result[0]
+        embed = discord.Embed(
+            title=f'🪙 Coin Flip — {result.title()}',
+            description=('✅ You won **{:,}** coins!'.format(bet) if won else '❌ You lost **{:,}** coins.'.format(bet)),
+            color=discord.Color.green() if won else discord.Color.red(),
+        )
+        await ctx.send(embed=embed)
 
-        if balance < bet:
-            await ctx.send("You don't have enough coins for this bet!")
-            return
-
-        if number_of_dice > 100:
-            await ctx.send("Sorry, I can't roll that many dice.")
-            return
-
-        # Remove bet amount first
-        c.execute('UPDATE balances SET balance = balance - ? WHERE user_id = ?', (bet, user_id))
-        bot.db.commit()
-
-        rolls = [random.randint(1, 6) for _ in range(number_of_dice)]
-        if sum(rolls) >= (number_of_dice * 3):
-            # Add winnings if won
-            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (bet * 6, user_id))
-            await ctx.send(f"Congratulations! You won {bet * 5} coins!")
-        else:
-            await ctx.send(
-                f"You rolled {rolls} which has a sum of {sum(rolls)} which does not meet the score and lost {bet} coins.")
-        bot.db.commit()
-
-    @bot.command()
-    async def slots(ctx, bet: int = 100):
-        '''Rolls a slot machine with a specified number of dice.'''
-        # Get user's balance
-        user_id = ctx.author.id
-        c = bot.db.cursor()
-        c.execute('SELECT balance FROM balances WHERE user_id = ?', (user_id,))
-        result = c.fetchone()
-
-        if not result:
-            c.execute('INSERT INTO balances (user_id, balance) VALUES (?, ?)', (user_id, 1000))
-            bot.db.commit()
-            balance = 1000
-            await ctx.send("Have you been here before? I'll give you a starting balance of 1,000 coins.")
-        else:
-            balance = result[0]
-
-        if balance < bet:
-            await ctx.send("You don't have enough coins for this bet!")
-            return
-
+    @commands.command(name='roll')
+    async def roll(self, ctx, dice: int = 1, bet: int = 100):
+        """Roll dice. Sum ≥ dice×3 to win 5× bet."""
+        if dice < 1 or dice > 20:
+            return await ctx.send('Roll 1–20 dice.')
         if bet <= 0:
-            await ctx.send("Please enter a positive amount to bet.")
-            return
-        elif bet > 3000:
-            await ctx.send("Sorry, I can't bet that much.")
-            return
+            return await ctx.send('Bet must be positive.')
+        bal = await self._get_balance(ctx.author.id)
+        if bal < bet:
+            return await ctx.send(f'You only have **{bal:,}** coins.')
 
-        # Remove bet amount first
-        c.execute('UPDATE balances SET balance = balance - ? WHERE user_id = ?', (bet, user_id))
-        bot.db.commit()
+        rolls = [random.randint(1, 6) for _ in range(dice)]
+        total = sum(rolls)
+        target = dice * 3
+        won = total >= target
+        delta = bet * 5 if won else -bet
+
+        async with self.bot.db.cursor() as cur:
+            await cur.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (delta, ctx.author.id))
+        await self.bot.db.commit()
+
+        roll_str = ' + '.join(str(r) for r in rolls) + f' = **{total}**'
+        embed = discord.Embed(
+            title=f'🎲 Dice Roll (need ≥ {target})',
+            description=roll_str,
+            color=discord.Color.green() if won else discord.Color.red(),
+        )
+        embed.add_field(name='Result', value=f'✅ Won **{bet*5:,}** coins!' if won else f'❌ Lost **{bet:,}** coins.')
+        await ctx.send(embed=embed)
+
+    @commands.command(name='slots')
+    async def slots(self, ctx, bet: int = 100):
+        """Spin the slot machine."""
+        if bet <= 0 or bet > 3000:
+            return await ctx.send('Bet must be between 1 and 3,000 coins.')
+        bal = await self._get_balance(ctx.author.id)
+        if bal < bet:
+            return await ctx.send(f'You only have **{bal:,}** coins.')
 
         symbols = ['⭐', '🍒', '🍋', '🍊', '🍉', '7️⃣', '💰', '💎', '💵']
-        result = []
-        for _ in range(3):
-            symbols_copy = symbols.copy()
-            random.shuffle(symbols_copy)
-            result.append(symbols_copy[0])
-        await ctx.send(f"🎰 Slot machine result: {' | '.join(result)}")
+        reels = [random.choice(symbols) for _ in range(3)]
+        stars = reels.count('⭐')
 
-        if result.count('⭐') == 3:
-            # jackpot
-            winnings = bet * 100
-            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
-            await ctx.send(f"You got a JACKPOT! You won {winnings} coins!")
-        elif result.count('⭐') == 0 and result[0] == result[1] == result[2]:
-            # All three symbols are the same and NOT stars
-            winnings = bet * 50
-            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
-            await ctx.send(f"Congratulations! You won {winnings} coins!")
-        elif result.count('⭐') == 1 and (result[0] == result[1] or result[1] == result[2] or result[0] == result[2]):
-            # Two symbols are the same and one is a star
-            winnings = bet * 10
-            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
-            await ctx.send(f"You got a match with a wild! You won {winnings} coins!")
-        elif result.count('⭐') == 2 and len(set(result)) == 2:
-            # 2 symbols are stars and the third does not matter
-            winnings = bet * 5
-            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
-            await ctx.send(f"You got two stars! You won {winnings} coins!")
-        elif result.count('⭐') == 1 and not (
-                result[0] == result[1] or result[1] == result[2] or result[0] == result[2]):
-            # One symbol is a star the other 2 are NOT the same
-            winnings = bet * 3
-            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
-            await ctx.send(f"You got a star! You won {winnings} coins!")
-        elif result[0] == result[1] or result[1] == result[2] or result[0] == result[2]:
-            # Two symbols are the same
-            winnings = bet * 2
-            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
-            await ctx.send(f"You got a double! You won {winnings} coins!")
+        if stars == 3:
+            multiplier, label = 100, '🎰 **JACKPOT!**'
+        elif stars == 0 and reels[0] == reels[1] == reels[2]:
+            multiplier, label = 50, '🎉 Triple match!'
+        elif stars == 1 and len(set(reels)) == 2:
+            multiplier, label = 10, '✨ Wild match!'
+        elif stars == 2:
+            multiplier, label = 5, '⭐ Two stars!'
+        elif stars == 1:
+            multiplier, label = 3, '⭐ One star!'
+        elif reels[0] == reels[1] or reels[1] == reels[2] or reels[0] == reels[2]:
+            multiplier, label = 2, '👀 Pair!'
         else:
-            await ctx.send(f"Sorry, you lost {bet} coins.")
-        bot.db.commit()
+            multiplier, label = 0, '😔 No match.'
 
-    @bot.command()
-    async def work(ctx):
-        '''Work for money!'''
-        user_id = ctx.author.id
-        c = bot.db.cursor()
+        delta = bet * multiplier - bet if multiplier else -bet
+        async with self.bot.db.cursor() as cur:
+            await cur.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (delta, ctx.author.id))
+        await self.bot.db.commit()
 
-        # Check last work time
-        c.execute('SELECT balance, last_work FROM balances WHERE user_id = ?', (user_id,))
-        result = c.fetchone()
-
-        import datetime
-        current_time = datetime.datetime.now()
-
-        if not result:
-            c.execute('INSERT INTO balances (user_id, balance, last_work) VALUES (?, ?, ?)',
-                          (user_id, 1000, current_time.strftime('%Y-%m-%d %H:%M:%S.%f')))
-            bot.db.commit()
+        embed = discord.Embed(
+            title='🎰 Slot Machine',
+            description=f'**{" | ".join(reels)}**\n\n{label}',
+            color=discord.Color.gold() if delta > 0 else discord.Color.red(),
+        )
+        if delta > 0:
+            embed.add_field(name='Won', value=f'+**{delta:,}** coins')
         else:
-            balance = result[0]
-            last_work = datetime.datetime.strptime(result[1], '%Y-%m-%d %H:%M:%S.%f') if result[1] else None
+            embed.add_field(name='Lost', value=f'**{abs(delta):,}** coins')
+        await ctx.send(embed=embed)
 
-            if last_work and (current_time - last_work).total_seconds() < 3600:
-                time_left = 3600 - (current_time - last_work).total_seconds()
-                minutes = int(time_left / 60)
-                await ctx.send(f"You need to wait {minutes} minutes before working again!")
-                return
+    @commands.command(name='work')
+    async def work(self, ctx):
+        """Work for coins (1-hour cooldown)."""
+        uid = ctx.author.id
+        async with self.bot.db.cursor() as cur:
+            await cur.execute('SELECT balance, last_work FROM balances WHERE user_id = ?', (uid,))
+            row = await cur.fetchone()
 
-        earnings = random.randint(0, 500)
-        outcome = random.randint(1, 100)
-        phrases_success = [
-            'Dr. Najjar asked you to complete the slides and you got it done in time and they look good!',
-            'You graded 100 assignments in record time!', 'You fixed a critical bug in the codebase and saved the day!',
-            'You lead the lab flawlessly and the students all got their assignment reviewed.',
-            'You organized a successful event for the department!', 'you ate it UP!!!',
-            'You worked your butt of an aced your exams! Congrats!'
+        if not row:
+            await self._get_balance(uid)
+            async with self.bot.db.cursor() as cur:
+                await cur.execute('SELECT balance, last_work FROM balances WHERE user_id = ?', (uid,))
+                row = await cur.fetchone()
+
+        now = datetime.now()
+        if row['last_work']:
+            try:
+                last = datetime.strptime(row['last_work'], '%Y-%m-%d %H:%M:%S.%f')
+                secs = (now - last).total_seconds()
+                if secs < 3600:
+                    mins = int((3600 - secs) / 60)
+                    return await ctx.send(embed=discord.Embed(
+                        description=f'⏳ You need to wait **{mins}** more minutes before working.',
+                        color=discord.Color.red(),
+                    ))
+            except Exception:
+                pass
+
+        success_phrases = [
+            'Dr. Najjar asked you to finish the slides and you nailed it!',
+            'You graded 100 assignments in record time!',
+            'You fixed a critical bug and saved the day!',
+            'You aced your exams! Congrats!',
+            'You organised a stellar department event!',
+        ]
+        fail_phrases = [
+            'You tried to edit Canvas and broke the HTML.',
+            'You pushed to main instead of dev. Everything is on fire.',
+            'You spilled coffee on your keyboard.',
+            'You accidentally emailed the whole university.',
         ]
 
-        phrases_failure = [
-            'You tried to edit the canvas and broke the entire HTML.',
-            'Instead of pushing to the dev branch you pushed to main and now everything is broken.',
-            'youre FIREDDDDDD',
-            'You accidentally deleted the entire project folder.',
-            'You spilled coffee on your keyboard and it stopped working.',
-            'You sent an email to the entire university by mistake.'
-        ]
-        if outcome <= 25:
-            await ctx.send(f"{random.choice(phrases_failure)} \n You lost {earnings} coins.")
-            c.execute('UPDATE balances SET balance = balance - ?, last_work = ? WHERE user_id = ?',
-                          (earnings, current_time.strftime('%Y-%m-%d %H:%M:%S.%f'), user_id))
-            bot.db.commit()
-        else:
-            await ctx.send(f"{random.choice(phrases_success)} \n You earned {earnings} coins.")
-            c.execute('UPDATE balances SET balance = balance + ?, last_work = ? WHERE user_id = ?',
-                          (earnings, current_time.strftime('%Y-%m-%d %H:%M:%S.%f'), user_id))
-            bot.db.commit()
-    @bot.command()
-    async def a_give(ctx, user: discord.Member, amount: int):
-        if amount <= 0:
-            await ctx.send("Please enter a positive amount to give.")
-            return
+        earnings = random.randint(50, 500)
+        won = random.randint(1, 100) > 25
+        delta = earnings if won else -earnings
 
-        target_id = user.id
+        now_str = now.strftime('%Y-%m-%d %H:%M:%S.%f')
+        async with self.bot.db.cursor() as cur:
+            await cur.execute(
+                'UPDATE balances SET balance = balance + ?, last_work = ? WHERE user_id = ?',
+                (delta, now_str, uid),
+            )
+        await self.bot.db.commit()
 
-        try:
-            c = bot.db.cursor()
-            # Check if recipient exists in database
-            c.execute('SELECT balance FROM balances WHERE user_id = ?', (target_id,))
-            recipient_balance = c.fetchone()
+        phrase = random.choice(success_phrases if won else fail_phrases)
+        embed = discord.Embed(
+            description=f'{phrase}\n\n{"+" if won else ""}{delta:,} coins',
+            color=discord.Color.green() if won else discord.Color.red(),
+        )
+        await ctx.send(embed=embed)
 
-            if not recipient_balance:
-                # Initialize recipient with starting balance
-                c.execute('INSERT INTO balances (user_id, balance) VALUES (?, ?)', (target_id, 1000))
+    @commands.command(name='rob')
+    async def rob(self, ctx, target: discord.Member):
+        """Attempt to rob another user (risky!)."""
+        if target.id == ctx.author.id:
+            return await ctx.send('You cannot rob yourself.')
+        target_bal = await self._get_balance(target.id)
+        if target_bal < 100:
+            return await ctx.send('That person is too broke to rob.')
 
-            # Perform the transaction
-            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (amount, target_id))
-            bot.db.commit()
-
-            await ctx.send(f"Successfully granted {amount:,} coins to {user.name}!")
-
-        except sql.Error as e:
-            await ctx.send(f"Error processing transaction: {e}")
-            print(f"Database error in a_give command: {e}")
-
-
-    @bot.command()
-    async def a_take(ctx, user: discord.Member, amount: float):
-        '''Admin command to take a specified amount of coins from another user.'''
-        if amount <= 0:
-            await ctx.send("Please enter a positive amount to take.")
-            return
-
-        user_id = ctx.author.id
-        target_id = user.id
-
-        try:
-            c = bot.db.cursor()
-            # Check recipient's balance
-            c.execute('SELECT balance FROM balances WHERE user_id = ?', (target_id,))
-            recipient_balance = c.fetchone()
-
-            if not recipient_balance or recipient_balance[0] < amount:
-                await ctx.send("The user doesn't have enough coins!")
-                return
-
-            # Perform the transaction
-            c.execute('UPDATE balances SET balance = balance - ? WHERE user_id = ?', (amount, target_id))
-            bot.db.commit()
-
-            await ctx.send(f"Successfully took {amount:,} coins from {user.name}!")
-
-        except sql.Error as e:
-            await ctx.send(f"Error processing transaction: {e}")
-            print(f"Database error in a_take command: {e}")
-
-    @bot.command()
-    async def rob(ctx, user_id: int):
-        '''Rob another user of a random amount of coins.'''
-        c = bot.db.cursor()
-        c.execute('SELECT balance FROM balances WHERE user_id = ?', (user_id,))
-        result = c.fetchone()
-
-        if not result:
-            await ctx.send("The user you are trying to rob does not have an account!")
-            return
-        else:
-            user_balance = result[0]
-            outcome = random.randint(1, 100)
+        caught = random.randint(1, 100) <= 75
+        if caught:
             loss = random.randint(100, 1000)
-            if outcome <= 75:
-                await ctx.send(f"You got caught and were sent to jail! You lost {loss} coins.")
-                c.execute('UPDATE balances SET balance = balance - ? WHERE user_id = ?', (loss, ctx.author.id))
-            else:
-                amount = random.randint(1, user_balance)
-                c.execute('UPDATE balances SET balance = balance - ? WHERE user_id = ?', (amount, user_id))
-                c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (amount, ctx.author.id))
-                bot.db.commit()
-                await ctx.send(f"You stole {amount:,} coins from {user_id}'s account!")
+            await self._add_balance(ctx.author.id, -min(loss, await self._get_balance(ctx.author.id)))
+            await ctx.send(embed=discord.Embed(
+                description=f'🚔 You got caught and lost **{loss:,}** coins!',
+                color=discord.Color.red(),
+            ))
+        else:
+            stolen = random.randint(1, min(target_bal, 500))
+            await self._add_balance(target.id, -stolen)
+            await self._add_balance(ctx.author.id, stolen)
+            await ctx.send(embed=discord.Embed(
+                description=f'💸 You stole **{stolen:,}** coins from {target.display_name}!',
+                color=discord.Color.green(),
+            ))
+
+    # ── Admin commands ─────────────────────────────────────────────────────────
+
+    @commands.command(name='a_give')
+    @commands.has_permissions(administrator=True)
+    async def a_give(self, ctx, user: discord.Member, amount: int):
+        """[Admin] Grant coins without deducting from anyone."""
+        if amount <= 0:
+            return await ctx.send('Amount must be positive.')
+        await self._add_balance(user.id, amount)
+        await ctx.send(embed=discord.Embed(
+            description=f'✅ Granted **{amount:,}** coins to {user.mention}.',
+            color=discord.Color.green(),
+        ))
+
+    @commands.command(name='a_take')
+    @commands.has_permissions(administrator=True)
+    async def a_take(self, ctx, user: discord.Member, amount: int):
+        """[Admin] Remove coins from a user."""
+        if amount <= 0:
+            return await ctx.send('Amount must be positive.')
+        await self._add_balance(user.id, -amount)
+        await ctx.send(embed=discord.Embed(
+            description=f'✅ Removed **{amount:,}** coins from {user.mention}.',
+            color=discord.Color.green(),
+        ))
 
 
-
-
-
-
+async def setup(bot):
+    await bot.add_cog(Economy(bot))

@@ -1,152 +1,209 @@
-"""Utility commands module"""
-
+"""modules/utils.py – General utility commands (Cog version)."""
 import re
 import io
-import datetime
 import asyncio
+import datetime
 from PIL import Image
 import discord
 from discord.ext import commands
 
 
-def setup(bot):
-    """Setup function to register commands with the bot"""
+class Utils(commands.Cog):
+    """General utility and moderation tools."""
 
-    @bot.command()
-    async def help(ctx):
-        '''Displays a list of available commands.'''
-        embed = discord.Embed(title='Help', description='[Documentation](https://github.com/cmlostek/coal/blob/main/README.md) ',  color=discord.Color.blue())
-        embed.add_field(name='Utility', value='`ping`, `greet`, `echo`, `color`, `whois`, `snipe`', inline=False)
-        embed.add_field(name='Minecraft', value='`status`', inline=False)
-        embed.add_field(name='Economy', value='`balance`, `daily`, `leaderboard`,`coinflip`, `roll`, `slots`, `give`, `rob`', inline=False)
-        embed.add_field(name='Graveyard', value='`death`, `revive`, `obit`', inline=False)
-        embed.add_field(name='levels', value='`rank`, `top`', inline=False)
+    def __init__(self, bot):
+        self.bot = bot
+        self._snipe: dict[int, tuple] = {}  # channel_id → (content, author, timestamp)
+
+    # ── Events ────────────────────────────────────────────────────────────────
+
+    @commands.Cog.listener()
+    async def on_message_delete(self, message: discord.Message):
+        if message.guild and message.content:
+            self._snipe[message.channel.id] = (message.content, message.author, message.created_at)
+
+    # ── Commands ──────────────────────────────────────────────────────────────
+
+    @commands.command(name='help')
+    async def help(self, ctx):
+        """Show all available commands."""
+        embed = discord.Embed(
+            title='Iron Bot — Command Reference',
+            description='Prefix: `!` · `-` · `?`',
+            color=0x5865F2,
+        )
+        embed.add_field(
+            name='⚙️ Setup',
+            value='`!setup` · `!setup view` · `!setup location` · `!setup timezone` · `!setup time`',
+            inline=False,
+        )
+        embed.add_field(
+            name='📋 Tasks',
+            value='`!task add/list/done/delete/view` · `!today` · `!week`',
+            inline=False,
+        )
+        embed.add_field(
+            name='📚 Assignments',
+            value='`!assign add/list/done/delete/courses`',
+            inline=False,
+        )
+        embed.add_field(
+            name='⏰ Reminders',
+            value='`!remind <time> to <message>` · `!reminders` · `!reminders delete <id>`',
+            inline=False,
+        )
+        embed.add_field(
+            name='🏷️ Tags',
+            value='`!tag <name>` · `!tag create/edit/delete/list/info/raw/search/transfer`',
+            inline=False,
+        )
+        embed.add_field(
+            name='📅 Calendar',
+            value='`!calendar setup/code/today/week/next/status/unlink`',
+            inline=False,
+        )
+        embed.add_field(
+            name='🎓 Canvas',
+            value='`!canvas setup/courses/assignments/grades/sync/status/unlink`',
+            inline=False,
+        )
+        embed.add_field(
+            name='📧 Email',
+            value='`!email setup/check/sleep/status/unlink`',
+            inline=False,
+        )
+        embed.add_field(
+            name='🌤️ Weather',
+            value='`!weather [city]` · `!forecast [city]`',
+            inline=False,
+        )
+        embed.add_field(
+            name='📊 Stats',
+            value='`!stats` · `!stats week` · `!stats month` · `!stats leaderboard`',
+            inline=False,
+        )
+        embed.add_field(
+            name='💰 Economy',
+            value='`!balance` · `!daily` · `!work` · `!coinflip` · `!slots` · `!roll` · `!give` · `!rob`',
+            inline=False,
+        )
+        embed.add_field(
+            name='⚡ Levels',
+            value='`!rank` · `!top`',
+            inline=False,
+        )
+        embed.add_field(
+            name='💀 Graveyard',
+            value='`!death` · `!revive` · `!obit`',
+            inline=False,
+        )
+        embed.add_field(
+            name='🎮 Minecraft',
+            value='`!status` · `!join` · `!leave`',
+            inline=False,
+        )
+        embed.add_field(
+            name='🔧 Utility',
+            value='`!ping` · `!whois` · `!color` · `!snipe` · `!echo` · `!schedule`',
+            inline=False,
+        )
+        embed.set_footer(text='Use !setup to configure channels, timezone, and connected services.')
         await ctx.send(embed=embed)
 
-    @bot.command()
-    async def ping(ctx):
-        '''Responds with the bot latency! Use to test if the bot is responsive.'''
-        await ctx.send(f'Pong! {round(bot.latency * 1000, 2)}ms')
+    @commands.command(name='ping')
+    async def ping(self, ctx):
+        """Check bot latency."""
+        await ctx.send(
+            embed=discord.Embed(
+                description=f'🏓 Pong! **{round(self.bot.latency * 1000, 2)} ms**',
+                color=discord.Color.green(),
+            )
+        )
 
-    @bot.command()
-    async def greet(ctx):
-        '''Sends a greeting message to the user.'''
-        await ctx.send('Greetings! How can I help you today? 👋')
-
-    @bot.command()
-    async def echo(ctx, *, message):
-        '''Echoes the provided message back to the user.'''
+    @commands.command(name='echo')
+    async def echo(self, ctx, *, message: str):
+        """Echo a message and delete the original."""
+        try:
+            await ctx.message.delete()
+        except Exception:
+            pass
         await ctx.send(message)
-        await ctx.message.delete()
 
-    @bot.command(name='color',
-                 description='Sends an embed where the embed color and the image in the embed is the provided color.',
-                 aliases=['colour', 'c'])
-    async def color(ctx, hexcode):
-        if not hexcode:
-            await ctx.send('Please provide a valid hexcode.')
-            return
-
+    @commands.command(name='color', aliases=['colour'])
+    async def color(self, ctx, hexcode: str):
+        """Show a colour swatch. Example: `!color #5865F2`"""
         if not re.match(r'^#(?:[0-9a-fA-F]{3}){1,2}$', hexcode):
-            await ctx.send('Please provide a valid hexcode.')
-            return
-        # Create color image
-        img = Image.new('RGB', (100, 100), hexcode)
-        img_bytes = io.BytesIO()
-        img.save(img_bytes, format='PNG')
-        img_bytes.seek(0)
+            return await ctx.send('❌ Invalid hex code. Example: `#5865F2`')
+        img = Image.new('RGB', (200, 200), hexcode)
+        buf = io.BytesIO()
+        img.save(buf, 'PNG')
+        buf.seek(0)
+        embed = discord.Embed(
+            description=f'Colour: `{hexcode}`',
+            color=int(hexcode.replace('#', '0x'), 16),
+        )
+        embed.set_thumbnail(url='attachment://color.png')
+        await ctx.send(file=discord.File(buf, 'color.png'), embed=embed)
 
-        # Create embed with image
-        embed = discord.Embed(color=int(hexcode.replace('#', '0x'), 0),
-                              description='The color of this embed is: ' + hexcode)
-        embed.set_thumbnail(url="attachment://color.png")
-
-        # Send embed with image
-        await ctx.send(file=discord.File(img_bytes, filename="color.png"), embed=embed)
-
-    @bot.command(name='whois', description='Fetches information about a user.',
-                 aliases=['userinfo', 'uinfo', 'who', 'user', 'w'])
-    async def whois(ctx, user: discord.Member = None):
-        if not user:
-            user = ctx.author
-        embed = discord.Embed(title=f'User Info - {user}', color=discord.Color.blue())
-        embed.set_thumbnail(url=user.avatar.url if user.avatar else None)
+    @commands.command(name='whois', aliases=['userinfo', 'uinfo', 'who'])
+    async def whois(self, ctx, user: discord.Member = None):
+        """Display information about a user."""
+        user = user or ctx.author
+        embed = discord.Embed(title=f'👤 {user}', color=discord.Color.blue())
+        embed.set_thumbnail(url=user.display_avatar.url)
         embed.add_field(name='Username', value=str(user), inline=True)
-        embed.add_field(name='User ID', value=user.id, inline=True)
-        embed.add_field(name='Account Created', value=user.created_at.strftime("%Y-%m-%d %H:%M:%S"), inline=True)
-        embed.add_field(name='Joined Server', value=user.joined_at.strftime("%Y-%m-%d %H:%M:%S"), inline=True)
-        embed.add_field(name='Roles', value=', '.join([role.name for role in user.roles]))
+        embed.add_field(name='ID', value=str(user.id), inline=True)
+        embed.add_field(name='Account Created', value=user.created_at.strftime('%Y-%m-%d'), inline=True)
+        embed.add_field(name='Joined Server', value=user.joined_at.strftime('%Y-%m-%d'), inline=True)
         embed.add_field(name='Top Role', value=user.top_role.mention, inline=True)
+        roles = [r.mention for r in user.roles if r.name != '@everyone']
+        embed.add_field(name=f'Roles ({len(roles)})', value=' '.join(roles[:10]) or 'None', inline=False)
         embed.set_footer(text=f'Requested by {ctx.author}')
         await ctx.send(embed=embed)
 
-    # Snipe functionality
-    snipe_messages_delete = {}
+    @commands.command(name='snipe')
+    async def snipe(self, ctx):
+        """Retrieve the last deleted message in this channel."""
+        data = self._snipe.get(ctx.channel.id)
+        if not data:
+            return await ctx.send('No recently deleted messages to snipe.')
+        content, author, ts = data
+        del self._snipe[ctx.channel.id]
+        embed = discord.Embed(description=content, color=discord.Color.purple(), timestamp=ts)
+        embed.set_author(name=str(author), icon_url=author.display_avatar.url)
+        embed.set_footer(text=f'Sniped by {ctx.author}')
+        await ctx.send(embed=embed)
 
-    @bot.event
-    async def on_message_delete(message):
-        # Ignore DMs or messages without content (e.g., embeds, system messages)
-        if message.guild and message.content:
-            snipe_messages_delete[message.channel.id] = (
-                message.content,
-                message.author,
-                message.created_at
-            )
+    @commands.command(name='schedule')
+    async def schedule(self, ctx, channel: discord.TextChannel, date: str, time: str, *, message: str):
+        """
+        Schedule a message.
 
-    @bot.command()
-    async def snipe(ctx):
-        '''Retrieves the last deleted message in the channel.'''
-        sniped_data = snipe_messages_delete.get(ctx.channel.id)
-
-        if sniped_data:
-            content, author, timestamp = sniped_data
-
-            embed = discord.Embed(
-                description=content,
-                color=discord.Color.purple(),
-                timestamp=timestamp
-            )
-            embed.set_author(name=str(author), icon_url=author.avatar.url if author.avatar else None)
-            embed.set_footer(text=f'Sniped by {ctx.author.name}')
-
-            # Remove the message immediately after sniping so it can't be sniped again
-            del snipe_messages_delete[ctx.channel.id]
-
-            await ctx.send(embed=embed)
-        else:
-            await ctx.send('No recently deleted messages to snipe. 😔')
-
-
-    @bot.command()
-    async def schedule_send(ctx, channel: discord.TextChannel, date: str, time: str, *, message: str):
-        '''Schedules a message to be sent to a channel at a specific date and time
-        Format: YYYY-MM-DD HH:MM'''
+        Usage: `!schedule #channel 2025-05-01 14:30 Hello world!`
+        """
         try:
-            # Parse date and time
-            dt_str = f"{date} {time}"
-            schedule_time = datetime.datetime.strptime(dt_str, "%Y-%m-%d %H:%M")
-
-            # Calculate delay in seconds
-            now = datetime.datetime.now()
-            if schedule_time <= now:
-                await ctx.send("Cannot schedule messages in the past!")
-                return
-
-            delay = (schedule_time - now).total_seconds()
-
-            # Schedule the message
-            async def send_scheduled_message():
-                await asyncio.sleep(delay)
-                try:
-                    await bot.fetch_channel(channel.id)
-                    await channel.send(message)
-                    await ctx.send(f"Scheduled message has been sent to {channel.mention}")
-                except:
-                    await ctx.send("Failed to send scheduled message")
-
-            asyncio.create_task(send_scheduled_message())
-            await ctx.send(
-                f"Message scheduled to be sent to {channel.mention} at {schedule_time.strftime('%Y-%m-%d %H:%M')}")
-
+            dt = datetime.datetime.strptime(f'{date} {time}', '%Y-%m-%d %H:%M')
         except ValueError:
-            await ctx.send("Invalid date/time format! Please use YYYY-MM-DD HH:MM")
+            return await ctx.send('❌ Invalid format. Use `YYYY-MM-DD HH:MM`.')
+        now = datetime.datetime.now()
+        if dt <= now:
+            return await ctx.send('❌ Cannot schedule messages in the past.')
+        delay = (dt - now).total_seconds()
+
+        async def _send():
+            await asyncio.sleep(delay)
+            try:
+                await channel.send(message)
+            except Exception:
+                pass
+
+        asyncio.create_task(_send())
+        embed = discord.Embed(
+            description=f'⏰ Scheduled to {channel.mention} at `{dt.strftime("%Y-%m-%d %H:%M")}`',
+            color=discord.Color.blue(),
+        )
+        await ctx.send(embed=embed)
+
+
+async def setup(bot):
+    await bot.add_cog(Utils(bot))
