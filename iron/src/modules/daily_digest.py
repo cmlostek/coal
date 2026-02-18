@@ -94,26 +94,16 @@ async def _forecast_section(location: str, api_key: str) -> str:
 
 
 async def _calendar_section(bot, user_id: int, tz_name: str) -> str:
-    """Fetch today's Google Calendar events for a user."""
+    """Fetch today's Google Calendar events (reads from token.json on disk)."""
     try:
-        from modules.calendar_module import _get_events, _creds_from_token, _refresh_if_needed, _fmt_event
-        import json
-
-        async with bot.db.cursor() as cur:
-            await cur.execute('SELECT credentials FROM calendar_config WHERE user_id = ?', (user_id,))
-            row = await cur.fetchone()
-        if not row or not row['credentials']:
-            return ''
-
-        creds = _creds_from_token(row['credentials'])
-        creds = await asyncio.to_thread(_refresh_if_needed, creds)
+        from modules.calendar_module import get_todays_events, _fmt_event
 
         tz = pytz.timezone(tz_name)
         now_local = datetime.now(tz)
         start = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
         end   = start + timedelta(days=1)
 
-        events = await _get_events(creds, start, end)
+        events = await get_todays_events(start, end)
         if not events:
             return '📅 No calendar events today.'
         return '📅 **Calendar:**\n' + '\n'.join(_fmt_event(e) for e in events[:10])
