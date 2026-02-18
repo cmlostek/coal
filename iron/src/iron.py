@@ -117,6 +117,14 @@ DB_TABLES = [
         credentials TEXT,
         calendar_id TEXT DEFAULT 'primary'
     )''',
+    # ── ICS / iCal feed URLs (per user, multiple) ────────────────────────────
+    '''CREATE TABLE IF NOT EXISTS calendar_ics (
+        id      INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        name    TEXT    NOT NULL,
+        url     TEXT    NOT NULL,
+        UNIQUE(user_id, name)
+    )''',
     # ── Canvas config (per user) ─────────────────────────────────────────────
     '''CREATE TABLE IF NOT EXISTS canvas_config (
         user_id    INTEGER PRIMARY KEY,

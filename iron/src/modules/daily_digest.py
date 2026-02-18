@@ -94,7 +94,7 @@ async def _forecast_section(location: str, api_key: str) -> str:
 
 
 async def _calendar_section(bot, user_id: int, tz_name: str) -> str:
-    """Fetch today's Google Calendar events (reads from token.json on disk)."""
+    """Fetch today's Google Calendar + ICS events for a user."""
     try:
         from modules.calendar_module import get_todays_events, _fmt_event
 
@@ -103,7 +103,7 @@ async def _calendar_section(bot, user_id: int, tz_name: str) -> str:
         start = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
         end   = start + timedelta(days=1)
 
-        events = await get_todays_events(start, end)
+        events = await get_todays_events(bot, user_id, start, end)
         if not events:
             return '📅 No calendar events today.'
         return '📅 **Calendar:**\n' + '\n'.join(_fmt_event(e) for e in events[:10])
