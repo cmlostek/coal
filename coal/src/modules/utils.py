@@ -16,11 +16,13 @@ def setup(bot):
     async def help(ctx):
         '''Displays a list of available commands.'''
         embed = discord.Embed(title='Help', description='[Documentation](https://github.com/cmlostek/coal/blob/main/README.md) ',  color=discord.Color.blue())
-        embed.add_field(name='Utility', value='`ping`, `greet`, `echo`, `color`, `whois`, `snipe`', inline=False)
+        embed.add_field(name='Utility', value='`ping`, `greet`, `echo`, `color`, `whois`, `snipe`, `haste`', inline=False)
         embed.add_field(name='Minecraft', value='`status`', inline=False)
-        embed.add_field(name='Economy', value='`balance`, `daily`, `leaderboard`,`coinflip`, `roll`, `slots`, `give`, `rob` `scratch`', inline=False)
+        embed.add_field(name='Economy', value='`balance`, `daily`, `leaderboard`, `coinflip`, `roll`, `slots`, `give`, `rob`, `scratch`', inline=False)
         embed.add_field(name='Graveyard', value='`death`, `revive`, `obit`', inline=False)
-        embed.add_field(name='levels', value='`rank`, `top`', inline=False)
+        embed.add_field(name='Levels', value='`rank`, `top`', inline=False)
+        embed.add_field(name='Reminders', value='`remind`, `reminders`, `cancelreminder`', inline=False)
+        embed.add_field(name='Stats', value='`stats`, `serverstats`', inline=False)
         await ctx.send(embed=embed)
 
     @bot.command()
