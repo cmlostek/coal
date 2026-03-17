@@ -4,7 +4,7 @@ import random
 import discord
 from discord import user
 from discord.ext import commands
-import sqlite3 as sql
+import psycopg2
 
 
 def setup(bot):
@@ -16,7 +16,7 @@ def setup(bot):
 
         try:
             c = bot.db.cursor()
-            c.execute('SELECT balance FROM balances WHERE user_id = ?', (user_id,))
+            c.execute('SELECT balance FROM balances WHERE user_id = %s', (user_id,))
             result = c.fetchone()
 
             if result:
@@ -24,11 +24,11 @@ def setup(bot):
                 await ctx.send(f'Your current balance is: 💰 {balance:,} coins')
             else:
                 # Initialize new user with starting balance of 1000
-                c.execute('INSERT INTO balances (user_id, balance) VALUES (?, ?)', (user_id, 1000))
+                c.execute('INSERT INTO balances (user_id, balance) VALUES (%s, %s)', (user_id, 1000))
                 bot.db.commit()
                 await ctx.send('Welcome! Your starting balance is: 💰 1,000 coins')
 
-        except sql.Error as e:
+        except psycopg2.Error as e:
             await ctx.send(f'Error accessing balance: {e}')
             print(f'Database error in balance command: {e}')
 
@@ -36,7 +36,7 @@ def setup(bot):
     async def daily(ctx):
         user_id = ctx.author.id
         c = bot.db.cursor()
-        c.execute('SELECT balance, last_daily FROM balances WHERE user_id = ?', (user_id,))
+        c.execute('SELECT balance, last_daily FROM balances WHERE user_id = %s', (user_id,))
         result = c.fetchone()
 
         if not result:
@@ -52,7 +52,7 @@ def setup(bot):
             return
 
         daily_amount = 500
-        c.execute('UPDATE balances SET balance = balance + ?, last_daily = ? WHERE user_id = ?',
+        c.execute('UPDATE balances SET balance = balance + %s, last_daily = %s WHERE user_id = %s',
                   (daily_amount, current_time.strftime('%Y-%m-%d'), user_id))
         await ctx.send(f"You've received your daily reward of {daily_amount:,} coins!")
         bot.db.commit()
@@ -94,7 +94,7 @@ def setup(bot):
             embed.set_footer(text=f"Requested by {ctx.author.name}")
             await ctx.send(embed=embed)
 
-        except sql.Error as e:
+        except psycopg2.Error as e:
             await ctx.send(f"Error accessing leaderboard: {e}")
             print(f"Database error in leaderboard command: {e}")
 
@@ -115,7 +115,7 @@ def setup(bot):
         try:
             c = bot.db.cursor()
             # Check sender's balance
-            c.execute('SELECT balance FROM balances WHERE user_id = ?', (user_id,))
+            c.execute('SELECT balance FROM balances WHERE user_id = %s', (user_id,))
             sender_balance = c.fetchone()
 
             if not sender_balance or sender_balance[0] < amount:
@@ -123,21 +123,21 @@ def setup(bot):
                 return
 
             # Check if recipient exists in database
-            c.execute('SELECT balance FROM balances WHERE user_id = ?', (target_id,))
+            c.execute('SELECT balance FROM balances WHERE user_id = %s', (target_id,))
             recipient_balance = c.fetchone()
 
             if not recipient_balance:
                 # Initialize recipient with starting balance
-                c.execute('INSERT INTO balances (user_id, balance) VALUES (?, ?)', (target_id, 1000))
+                c.execute('INSERT INTO balances (user_id, balance) VALUES (%s, %s)', (target_id, 1000))
 
             # Perform the transaction
-            c.execute('UPDATE balances SET balance = balance - ? WHERE user_id = ?', (amount, user_id))
-            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (amount, target_id))
+            c.execute('UPDATE balances SET balance = balance - %s WHERE user_id = %s', (amount, user_id))
+            c.execute('UPDATE balances SET balance = balance + %s WHERE user_id = %s', (amount, target_id))
             bot.db.commit()
 
             await ctx.send(f"Successfully transferred {amount:,} coins to {user.name}!")
 
-        except sql.Error as e:
+        except psycopg2.Error as e:
             await ctx.send(f"Error processing transaction: {e}")
             print(f"Database error in give command: {e}")
 
@@ -146,14 +146,14 @@ def setup(bot):
         '''Flips a coin and returns the result.'''
         user_id = ctx.author.id
         c = bot.db.cursor()
-        c.execute('SELECT balance FROM balances WHERE user_id = ?', (user_id,))
+        c.execute('SELECT balance FROM balances WHERE user_id = %s', (user_id,))
         result = c.fetchone()
 
         if not result:
-            c.execute('INSERT INTO balances (user_id, balance) VALUES (?, ?)', (user_id, 1000))
+            c.execute('INSERT INTO balances (user_id, balance) VALUES (%s, %s)', (user_id, 1000))
             bot.db.commit()
             balance = 1000
-            await ctx.send("Have you been here before? I'll give you a starting balance of 1,000 coins.")
+            await ctx.send("Have you been here before%s I'll give you a starting balance of 1,000 coins.")
         else:
             balance = result[0]
 
@@ -162,13 +162,13 @@ def setup(bot):
             return
 
         # Remove bet amount first
-        c.execute('UPDATE balances SET balance = balance - ? WHERE user_id = ?', (bet, user_id))
+        c.execute('UPDATE balances SET balance = balance - %s WHERE user_id = %s', (bet, user_id))
         bot.db.commit()
 
         result = random.choice(['heads', 'tails'])
         if flip.lower() == result:
             # Add winnings if won
-            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (bet * 2, user_id))
+            c.execute('UPDATE balances SET balance = balance + %s WHERE user_id = %s', (bet * 2, user_id))
             await ctx.send(f"The coin landed on: **{result}**\nYou won {bet} coins!")
         else:
             await ctx.send(f"The coin landed on: **{result}**\nYou lost {bet} coins!")
@@ -179,14 +179,14 @@ def setup(bot):
         '''Rolls a dice with a specified number of sides.'''
         user_id = ctx.author.id
         c = bot.db.cursor()
-        c.execute('SELECT balance FROM balances WHERE user_id = ?', (user_id,))
+        c.execute('SELECT balance FROM balances WHERE user_id = %s', (user_id,))
         result = c.fetchone()
 
         if not result:
-            c.execute('INSERT INTO balances (user_id, balance) VALUES (?, ?)', (user_id, 1000))
+            c.execute('INSERT INTO balances (user_id, balance) VALUES (%s, %s)', (user_id, 1000))
             bot.db.commit()
             balance = 1000
-            await ctx.send("Have you been here before? I'll give you a starting balance of 1,000 coins.")
+            await ctx.send("Have you been here before%s I'll give you a starting balance of 1,000 coins.")
         else:
             balance = result[0]
 
@@ -199,14 +199,14 @@ def setup(bot):
             return
 
         # Remove bet amount first
-        c.execute('UPDATE balances SET balance = balance - ? WHERE user_id = ?', (bet, user_id))
+        c.execute('UPDATE balances SET balance = balance - %s WHERE user_id = %s', (bet, user_id))
         bot.db.commit()
 
         rolls = [random.randint(1, 6) for _ in range(number_of_dice)]
         result = number_of_dice * random.randint(1, 4)
         if sum(rolls) >= result:
             # Add winnings if won
-            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (bet * 6, user_id))
+            c.execute('UPDATE balances SET balance = balance + %s WHERE user_id = %s', (bet * 6, user_id))
             await ctx.send(f"Congratulations! You won {bet * 5} coins!")
         else:
             await ctx.send(
@@ -219,14 +219,14 @@ def setup(bot):
         # Get user's balance
         user_id = ctx.author.id
         c = bot.db.cursor()
-        c.execute('SELECT balance FROM balances WHERE user_id = ?', (user_id,))
+        c.execute('SELECT balance FROM balances WHERE user_id = %s', (user_id,))
         result = c.fetchone()
 
         if not result:
-            c.execute('INSERT INTO balances (user_id, balance) VALUES (?, ?)', (user_id, 1000))
+            c.execute('INSERT INTO balances (user_id, balance) VALUES (%s, %s)', (user_id, 1000))
             bot.db.commit()
             balance = 1000
-            await ctx.send("Have you been here before? I'll give you a starting balance of 1,000 coins.")
+            await ctx.send("Have you been here before%s I'll give you a starting balance of 1,000 coins.")
         else:
             balance = result[0]
 
@@ -242,7 +242,7 @@ def setup(bot):
             return
 
         # Remove bet amount first
-        c.execute('UPDATE balances SET balance = balance - ? WHERE user_id = ?', (bet, user_id))
+        c.execute('UPDATE balances SET balance = balance - %s WHERE user_id = %s', (bet, user_id))
         bot.db.commit()
 
         symbols = ['⭐', '🍒', '🍋', '🍊', '🍉', '7️⃣', '💰', '💎', '💵']
@@ -256,33 +256,33 @@ def setup(bot):
         if result.count('⭐') == 3:
             # jackpot
             winnings = bet * 100
-            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
+            c.execute('UPDATE balances SET balance = balance + %s WHERE user_id = %s', (winnings + bet, user_id))
             await ctx.send(f"You got a JACKPOT! You won {winnings} coins!")
         elif result.count('⭐') == 0 and result[0] == result[1] == result[2]:
             # All three symbols are the same and NOT stars
             winnings = bet * 50
-            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
+            c.execute('UPDATE balances SET balance = balance + %s WHERE user_id = %s', (winnings + bet, user_id))
             await ctx.send(f"Congratulations! You won {winnings} coins!")
         elif result.count('⭐') == 1 and (result[0] == result[1] or result[1] == result[2] or result[0] == result[2]):
             # Two symbols are the same and one is a star
             winnings = bet * 10
-            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
+            c.execute('UPDATE balances SET balance = balance + %s WHERE user_id = %s', (winnings + bet, user_id))
             await ctx.send(f"You got a match with a wild! You won {winnings} coins!")
         elif result.count('⭐') == 2 and len(set(result)) == 2:
             # 2 symbols are stars and the third does not matter
             winnings = bet * 5
-            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
+            c.execute('UPDATE balances SET balance = balance + %s WHERE user_id = %s', (winnings + bet, user_id))
             await ctx.send(f"You got two stars! You won {winnings} coins!")
         elif result.count('⭐') == 1 and not (
                 result[0] == result[1] or result[1] == result[2] or result[0] == result[2]):
             # One symbol is a star the other 2 are NOT the same
             winnings = bet * 3
-            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
+            c.execute('UPDATE balances SET balance = balance + %s WHERE user_id = %s', (winnings + bet, user_id))
             await ctx.send(f"You got a star! You won {winnings} coins!")
         elif result[0] == result[1] or result[1] == result[2] or result[0] == result[2]:
             # Two symbols are the same
             winnings = bet * 2
-            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
+            c.execute('UPDATE balances SET balance = balance + %s WHERE user_id = %s', (winnings + bet, user_id))
             await ctx.send(f"You got a double! You won {winnings} coins!")
         else:
             await ctx.send(f"Sorry, you lost {bet} coins.")
@@ -295,14 +295,14 @@ def setup(bot):
         c = bot.db.cursor()
 
         # Check last work time
-        c.execute('SELECT balance, last_work FROM balances WHERE user_id = ?', (user_id,))
+        c.execute('SELECT balance, last_work FROM balances WHERE user_id = %s', (user_id,))
         result = c.fetchone()
 
         import datetime
         current_time = datetime.datetime.now()
 
         if not result:
-            c.execute('INSERT INTO balances (user_id, balance, last_work) VALUES (?, ?, ?)',
+            c.execute('INSERT INTO balances (user_id, balance, last_work) VALUES (%s, %s, %s)',
                           (user_id, 1000, current_time.strftime('%Y-%m-%d %H:%M:%S.%f')))
             bot.db.commit()
         else:
@@ -335,12 +335,12 @@ def setup(bot):
         ]
         if outcome <= 25:
             await ctx.send(f"{random.choice(phrases_failure)} \n You lost {earnings} coins.")
-            c.execute('UPDATE balances SET balance = balance - ?, last_work = ? WHERE user_id = ?',
+            c.execute('UPDATE balances SET balance = balance - %s, last_work = %s WHERE user_id = %s',
                           (earnings, current_time.strftime('%Y-%m-%d %H:%M:%S.%f'), user_id))
             bot.db.commit()
         else:
             await ctx.send(f"{random.choice(phrases_success)} \n You earned {earnings} coins.")
-            c.execute('UPDATE balances SET balance = balance + ?, last_work = ? WHERE user_id = ?',
+            c.execute('UPDATE balances SET balance = balance + %s, last_work = %s WHERE user_id = %s',
                           (earnings, current_time.strftime('%Y-%m-%d %H:%M:%S.%f'), user_id))
             bot.db.commit()
     @bot.command()
@@ -354,20 +354,20 @@ def setup(bot):
         try:
             c = bot.db.cursor()
             # Check if recipient exists in database
-            c.execute('SELECT balance FROM balances WHERE user_id = ?', (target_id,))
+            c.execute('SELECT balance FROM balances WHERE user_id = %s', (target_id,))
             recipient_balance = c.fetchone()
 
             if not recipient_balance:
                 # Initialize recipient with starting balance
-                c.execute('INSERT INTO balances (user_id, balance) VALUES (?, ?)', (target_id, 1000))
+                c.execute('INSERT INTO balances (user_id, balance) VALUES (%s, %s)', (target_id, 1000))
 
             # Perform the transaction
-            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (amount, target_id))
+            c.execute('UPDATE balances SET balance = balance + %s WHERE user_id = %s', (amount, target_id))
             bot.db.commit()
 
             await ctx.send(f"Successfully granted {amount:,} coins to {user.name}!")
 
-        except sql.Error as e:
+        except psycopg2.Error as e:
             await ctx.send(f"Error processing transaction: {e}")
             print(f"Database error in a_give command: {e}")
 
@@ -385,7 +385,7 @@ def setup(bot):
         try:
             c = bot.db.cursor()
             # Check recipient's balance
-            c.execute('SELECT balance FROM balances WHERE user_id = ?', (target_id,))
+            c.execute('SELECT balance FROM balances WHERE user_id = %s', (target_id,))
             recipient_balance = c.fetchone()
 
             if not recipient_balance or recipient_balance[0] < amount:
@@ -393,12 +393,12 @@ def setup(bot):
                 return
 
             # Perform the transaction
-            c.execute('UPDATE balances SET balance = balance - ? WHERE user_id = ?', (amount, target_id))
+            c.execute('UPDATE balances SET balance = balance - %s WHERE user_id = %s', (amount, target_id))
             bot.db.commit()
 
             await ctx.send(f"Successfully took {amount:,} coins from {user.name}!")
 
-        except sql.Error as e:
+        except psycopg2.Error as e:
             await ctx.send(f"Error processing transaction: {e}")
             print(f"Database error in a_take command: {e}")
 
@@ -406,7 +406,7 @@ def setup(bot):
     async def rob(ctx, user_id: int):
         '''Rob another user of a random amount of coins.'''
         c = bot.db.cursor()
-        c.execute('SELECT balance FROM balances WHERE user_id = ?', (user_id,))
+        c.execute('SELECT balance FROM balances WHERE user_id = %s', (user_id,))
         result = c.fetchone()
 
         if not result:
@@ -418,11 +418,11 @@ def setup(bot):
             loss = random.randint(100, 1000)
             if outcome <= 75:
                 await ctx.send(f"You got caught and were sent to jail! You lost {loss} coins.")
-                c.execute('UPDATE balances SET balance = balance - ? WHERE user_id = ?', (loss, ctx.author.id))
+                c.execute('UPDATE balances SET balance = balance - %s WHERE user_id = %s', (loss, ctx.author.id))
             else:
                 amount = random.randint(1, user_balance)
-                c.execute('UPDATE balances SET balance = balance - ? WHERE user_id = ?', (amount, user_id))
-                c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (amount, ctx.author.id))
+                c.execute('UPDATE balances SET balance = balance - %s WHERE user_id = %s', (amount, user_id))
+                c.execute('UPDATE balances SET balance = balance + %s WHERE user_id = %s', (amount, ctx.author.id))
                 bot.db.commit()
                 await ctx.send(f"You stole {amount:,} coins from {user_id}'s account!")
 
@@ -433,14 +433,14 @@ def setup(bot):
         # Get user's balance
         user_id = ctx.author.id
         c = bot.db.cursor()
-        c.execute('SELECT balance FROM balances WHERE user_id = ?', (user_id,))
+        c.execute('SELECT balance FROM balances WHERE user_id = %s', (user_id,))
         result = c.fetchone()
 
         if not result:
-            c.execute('INSERT INTO balances (user_id, balance) VALUES (?, ?)', (user_id, 1000))
+            c.execute('INSERT INTO balances (user_id, balance) VALUES (%s, %s)', (user_id, 1000))
             bot.db.commit()
             balance = 1000
-            await ctx.send("Have you been here before? I'll give you a starting balance of 1,000 coins.")
+            await ctx.send("Have you been here before%s I'll give you a starting balance of 1,000 coins.")
         else:
             balance = result[0]
 
@@ -453,7 +453,7 @@ def setup(bot):
             return
 
         # Remove bet amount first
-        c.execute('UPDATE balances SET balance = balance - ? WHERE user_id = ?', (bet, user_id))
+        c.execute('UPDATE balances SET balance = balance - %s WHERE user_id = %s', (bet, user_id))
         bot.db.commit()
 
         symbols = ['⭐', '🍒', '🍋', '🍊', '🍉', '7️⃣', '💰', '💎', '💵']
@@ -467,33 +467,33 @@ def setup(bot):
         if result.count('⭐') == 3:
             # jackpot
             winnings = bet * 100
-            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
+            c.execute('UPDATE balances SET balance = balance + %s WHERE user_id = %s', (winnings + bet, user_id))
             await ctx.send(f"||You got a JACKPOT! You won {winnings} coins!||")
         elif result.count('⭐') == 0 and result[0] == result[1] == result[2]:
             # All three symbols are the same and NOT stars
             winnings = bet * 50
-            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
+            c.execute('UPDATE balances SET balance = balance + %s WHERE user_id = %s', (winnings + bet, user_id))
             await ctx.send(f"||Congratulations! You won {winnings} coins!||")
         elif result.count('⭐') == 1 and (result[0] == result[1] or result[1] == result[2] or result[0] == result[2]):
             # Two symbols are the same and one is a star
             winnings = bet * 10
-            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
+            c.execute('UPDATE balances SET balance = balance + %s WHERE user_id = %s', (winnings + bet, user_id))
             await ctx.send(f"||You got a match with a wild! You won {winnings} coins!||")
         elif result.count('⭐') == 2 and len(set(result)) == 2:
             # 2 symbols are stars and the third does not matter
             winnings = bet * 5
-            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
+            c.execute('UPDATE balances SET balance = balance + %s WHERE user_id = %s', (winnings + bet, user_id))
             await ctx.send(f"||You got two stars! You won {winnings} coins!||")
         elif result.count('⭐') == 1 and not (
                 result[0] == result[1] or result[1] == result[2] or result[0] == result[2]):
             # One symbol is a star the other 2 are NOT the same
             winnings = bet * 3
-            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
+            c.execute('UPDATE balances SET balance = balance + %s WHERE user_id = %s', (winnings + bet, user_id))
             await ctx.send(f"||You got a star! You won {winnings} coins!||")
         elif result[0] == result[1] or result[1] == result[2] or result[0] == result[2]:
             # Two symbols are the same
             winnings = bet * 2
-            c.execute('UPDATE balances SET balance = balance + ? WHERE user_id = ?', (winnings + bet, user_id))
+            c.execute('UPDATE balances SET balance = balance + %s WHERE user_id = %s', (winnings + bet, user_id))
             await ctx.send(f"||You got a double! You won {winnings} coins!||")
         else:
             await ctx.send(f"||Sorry, you lost {bet} coins.||")

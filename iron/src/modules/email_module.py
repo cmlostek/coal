@@ -105,9 +105,10 @@ class Email(commands.Cog):
         embed = discord.Embed(
             title='📧 Email Commands',
             description=(
-                '`!email setup <address> <app_password> [imap]` – link inbox\n'
+                '`!email setup <address> <app_password>` – link inbox\n'
                 '`!email check` – count overnight emails now\n'
                 '`!email sleep <start> <end>` – set sleep window (e.g. `22:00 07:00`)\n'
+                '`!email imap <server>` – change IMAP server (default: imap.gmail.com)\n'
                 '`!email status` – show configuration\n'
                 '`!email unlink` – remove configuration'
             ),
@@ -116,17 +117,30 @@ class Email(commands.Cog):
         await ctx.send(embed=embed)
 
     @email_group.command(name='setup')
-    async def email_setup(self, ctx, email_addr: str, app_password: str, imap_server: str = 'imap.gmail.com'):
+    async def email_setup(self, ctx, email_addr: str, *, app_password: str):
         """
         Link your email inbox via IMAP.
 
-        For Gmail: generate an App Password in your Google Account settings.
+        Usage: `!email setup you@gmail.com yourAppPassword`
+
+        For Gmail: generate a 16-character App Password in your Google Account
+        (myaccount.google.com/apppasswords). Spaces in the password are fine —
+        just paste it as-is after your email address.
+
+        To use a non-Gmail server run `!email imap <server>` afterwards.
         The setup message is deleted immediately to protect your credentials.
         """
+        # Strip spaces from app password (Google includes them for readability)
+        app_password = app_password.replace(' ', '')
+
         try:
             await ctx.message.delete()
         except Exception:
             pass
+
+        # Look up any previously stored IMAP server, default to Gmail
+        cfg = await self._get_config(ctx.author.id)
+        imap_server = cfg['imap_server'] if cfg and cfg['imap_server'] else 'imap.gmail.com'
 
         # Test the connection
         try:
@@ -235,6 +249,26 @@ class Email(commands.Cog):
         embed.add_field(name='Sleep Window',
                         value=f'{cfg["sleep_start"]} → {cfg["sleep_end"]}', inline=True)
         await ctx.send(embed=embed)
+
+    @email_group.command(name='imap')
+    async def email_imap(self, ctx, server: str):
+        """
+        Set a custom IMAP server (default is imap.gmail.com).
+
+        Examples:
+          `!email imap imap.gmail.com`       – Gmail
+          `!email imap outlook.office365.com` – Outlook / Microsoft 365
+          `!email imap imap.mail.yahoo.com`  – Yahoo Mail
+        """
+        async with self.bot.db.cursor() as cur:
+            await cur.execute(
+                '''INSERT INTO email_config (user_id, imap_server)
+                   VALUES (?, ?)
+                   ON CONFLICT(user_id) DO UPDATE SET imap_server = excluded.imap_server''',
+                (ctx.author.id, server.strip()),
+            )
+        await self.bot.db.commit()
+        await ctx.send(f'✅ IMAP server set to `{server.strip()}`. Re-run `!email setup` to reconnect.')
 
     @email_group.command(name='unlink')
     async def email_unlink(self, ctx):

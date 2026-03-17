@@ -1,6 +1,5 @@
 import discord
 from discord.ext import commands
-import sqlite3 as sql
 import random
 
 
@@ -11,7 +10,7 @@ def setup(bot):
     c = bot.db.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS levels
                  (
-                     id    INTEGER PRIMARY KEY,
+                     id    BIGINT PRIMARY KEY,
                      level INTEGER DEFAULT 1,
                      xp    INTEGER DEFAULT 0
                  )''')
@@ -26,12 +25,12 @@ def setup(bot):
         c = bot.db.cursor()
 
         # Insert or update user record
-        c.execute('INSERT OR IGNORE INTO levels (id, level, xp) VALUES (?, 1, 0)', (user_id,))
-        c.execute('UPDATE levels SET xp = xp + ? WHERE id = ?', (xp_amount, user_id))
+        c.execute('INSERT INTO levels (id, level, xp) VALUES (%s, 1, 0) ON CONFLICT (id) DO NOTHING', (user_id,))
+        c.execute('UPDATE levels SET xp = xp + %s WHERE id = %s', (xp_amount, user_id))
         bot.db.commit()
 
         # Check for level up
-        c.execute('SELECT level, xp FROM levels WHERE id = ?', (user_id,))
+        c.execute('SELECT level, xp FROM levels WHERE id = %s', (user_id,))
         current_level, current_xp = c.fetchone()
 
         xp_needed = calculate_xp_needed(current_level)
@@ -40,7 +39,7 @@ def setup(bot):
             current_level += 1
 
             # Update database immediately
-            c.execute('UPDATE levels SET level = ?, xp = ? WHERE id = ?', (current_level, current_xp, user_id))
+            c.execute('UPDATE levels SET level = %s, xp = %s WHERE id = %s', (current_level, current_xp, user_id))
             bot.db.commit()
 
             try:
@@ -67,7 +66,7 @@ def setup(bot):
         '''Displays a user's level and experience in an embed'''
         user = user or ctx.author
         c = bot.db.cursor()
-        c.execute('SELECT level, xp FROM levels WHERE id = ?', (user.id,))
+        c.execute('SELECT level, xp FROM levels WHERE id = %s', (user.id,))
         result = c.fetchone()
 
         if result:
@@ -124,7 +123,7 @@ def setup(bot):
             else:
                 await ctx.send(f"Resetting {user.mention}'s XP and level.")
                 c = bot.db.cursor()
-                c.execute('UPDATE levels SET level = 1, xp = 0 WHERE id = ?', (user.id,))
+                c.execute('UPDATE levels SET level = 1, xp = 0 WHERE id = %s', (user.id,))
                 bot.db.commit()
                 await ctx.send(f"Reset {user.mention}'s XP and level.")
         else:

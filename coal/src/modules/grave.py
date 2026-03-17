@@ -29,13 +29,15 @@ def setup(bot):
         else:
             first = args[0]
             if first == '0' or first.startswith('<@') or first.isdigit():
-                # Case 2: First argument is an ID/mention ('0' or digits)
+                # Case 2: First argument is an ID/mention ('0' or digits) 
                 user_id_str = first
-                reason = ' '.join(args[1:]) if len(args) > 1 else None
+                # Use str.strip() to remove punctuation from each word
+                reason = ' '.join(word.strip('.,!%s;:\'\"') for word in args[1:]) if len(args) > 1 else None
             else:
                 # Case 3: No ID provided (first arg is part of reason) - use invoker's ID
                 user_id_str = str(ctx.author.id)
-                reason = ' '.join(args)
+                # Use str.strip() to remove punctuation from each word
+                reason = ' '.join(word.strip('.,!%s;:\'\"') for word in args)
 
         # Clean up the ID string to only contain digits if it was a mention
         digits = ''.join(ch for ch in user_id_str if ch.isdigit())
@@ -53,7 +55,7 @@ def setup(bot):
         num = (row[0] if row and row[0] is not None else 0) + 1
 
         # Insert: letting log_id AUTOINCREMENT, storing user_id, cntr, and reason
-        c.execute('INSERT INTO death_log(id, cntr, reason) VALUES (?,?,?)', (final_user_id, num, reason))
+        c.execute('INSERT INTO death_log(id, cntr, reason) VALUES (%s,%s,%s)', (final_user_id, num, reason))
         bot.db.commit()
 
         # Notify channel / user
@@ -72,6 +74,15 @@ def setup(bot):
                 await death_channel.send(f'💀 **Death #{num}** - You have met a terrible fate, {mention}.')
 
             await ctx.send('A new soul has entered the graveyard.')
+
+    @bot.command()
+    async def kill(ctx, *args):
+        '''
+        Kills the specified user. Adding a death to their log.
+        '''
+        ctx.send(f"{ctx.author.mention} has killed {args[0]} for reason {args[1]}.")
+        await ctx.invoke(death, args[0], args[1])
+
 
     @bot.command(name='revive', aliases=['resurrect', 'undeath', 'r'])
     async def revive(ctx, *args):
@@ -179,7 +190,7 @@ def setup(bot):
 
         # Regular User Lookup
         # Search by the exact user_id string
-        c.execute('SELECT cntr, reason FROM death_log WHERE id = ? ORDER BY cntr DESC', (target_id_for_query,))
+        c.execute('SELECT cntr, reason FROM death_log WHERE id = %s ORDER BY cntr DESC', (target_id_for_query,))
         rows = c.fetchall()
 
         if rows:
