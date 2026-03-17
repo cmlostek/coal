@@ -29,36 +29,6 @@ bot = Bot(command_prefix='-' or '!' or '?', intents=intents, help_command=None)
 
 @bot.event
 async def on_ready():
-    print(f'We have logged in as {bot.user}')
-
-    # Initialize the database connection and ensure tables exist
-    bot.db = psycopg2.connect(DATABASE_URL)
-    print(f'Connected to Supabase database.')
-
-    c = bot.db.cursor()
-
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS death_log (
-            log_id  SERIAL PRIMARY KEY,
-            id      TEXT,
-            cntr    INTEGER,
-            reason  TEXT
-        )
-    ''')
-    print('Ensured table: death_log')
-
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS balances (
-            user_id    BIGINT PRIMARY KEY,
-            balance    INTEGER DEFAULT 1000,
-            last_daily TEXT DEFAULT NULL,
-            last_work  TEXT DEFAULT NULL
-        )
-    ''')
-    print('Ensured table: balances')
-    bot.db.commit()
-
-
     print(f'{bot.user} has connected to Discord!')
     print(f'Monitoring Minecraft server: {MINECRAFT_SERVER_IP}')
 
@@ -67,7 +37,6 @@ async def on_ready():
     loaded = 0
     for module in modules:
         try:
-            # Import the module dynamically
             mod = __import__(f'modules.{module}', fromlist=['setup'])
             mod.setup(bot)
             print(f'Loaded module: {module}')
@@ -81,7 +50,7 @@ async def on_ready():
     else:
         print(f'Loaded {loaded} out of {len(modules)} modules.')
 
-    print(f'{bot.user} has connected to Discord! All databases loaded. All Modules loaded. Ready to go!')
+    print(f'All databases loaded. All Modules loaded. Ready to go!')
 
 # Run the bot
 
@@ -90,7 +59,36 @@ if __name__ == '__main__':
         print("Error: DISCORD_TOKEN, MINECRAFT_SERVER_IP, or DATABASE_URL is not set. Please check your environment variables.")
     else:
         try:
+            # Connect to DB before starting the event loop so the blocking
+            # network call does not freeze the Discord heartbeat.
+            print('Connecting to Supabase...')
+            bot.db = psycopg2.connect(DATABASE_URL)
+            print('Connected to Supabase database.')
+
+            c = bot.db.cursor()
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS death_log (
+                    log_id  SERIAL PRIMARY KEY,
+                    id      TEXT,
+                    cntr    INTEGER,
+                    reason  TEXT
+                )
+            ''')
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS balances (
+                    user_id    BIGINT PRIMARY KEY,
+                    balance    INTEGER DEFAULT 1000,
+                    last_daily TEXT DEFAULT NULL,
+                    last_work  TEXT DEFAULT NULL
+                )
+            ''')
+            bot.db.commit()
+            c.close()
+            print('Tables ensured.')
+
             bot.run(TOKEN)
+        except psycopg2.OperationalError as e:
+            print(f"Error: Could not connect to database: {e}")
         except discord.errors.LoginFailure:
             print("Error: Improper token has been passed. Please check your DISCORD_TOKEN.")
         except KeyboardInterrupt:
