@@ -10,8 +10,8 @@ def setup(bot):
 
     c = bot.db.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS user_stats (
-        user_id       INTEGER,
-        guild_id      INTEGER,
+        user_id       BIGINT,
+        guild_id      BIGINT,
         messages_sent INTEGER DEFAULT 0,
         voice_seconds INTEGER DEFAULT 0,
         PRIMARY KEY (user_id, guild_id)
@@ -27,7 +27,7 @@ def setup(bot):
         c = bot.db.cursor()
         c.execute('''
             INSERT INTO user_stats (user_id, guild_id, messages_sent, voice_seconds)
-            VALUES (?, ?, 1, 0)
+            VALUES (%s, %s, 1, 0)
             ON CONFLICT(user_id, guild_id) DO UPDATE SET messages_sent = messages_sent + 1
         ''', (message.author.id, message.guild.id))
         bot.db.commit()
@@ -45,8 +45,8 @@ def setup(bot):
                 c = bot.db.cursor()
                 c.execute('''
                     INSERT INTO user_stats (user_id, guild_id, messages_sent, voice_seconds)
-                    VALUES (?, ?, 0, ?)
-                    ON CONFLICT(user_id, guild_id) DO UPDATE SET voice_seconds = voice_seconds + ?
+                    VALUES (%s, %s, 0, %s)
+                    ON CONFLICT(user_id, guild_id) DO UPDATE SET voice_seconds = voice_seconds + %s
                 ''', (member.id, member.guild.id, secs, secs))
                 bot.db.commit()
 
@@ -70,7 +70,7 @@ def setup(bot):
         user = user or ctx.author
         c = bot.db.cursor()
         c.execute(
-            'SELECT messages_sent, voice_seconds FROM user_stats WHERE user_id = ? AND guild_id = ?',
+            'SELECT messages_sent, voice_seconds FROM user_stats WHERE user_id = %s AND guild_id = %s',
             (user.id, ctx.guild.id)
         )
         row = c.fetchone()
@@ -78,7 +78,7 @@ def setup(bot):
         voice_secs = row[1] if row else 0
 
         c.execute(
-            'SELECT COUNT(*) FROM user_stats WHERE guild_id = ? AND messages_sent > ?',
+            'SELECT COUNT(*) FROM user_stats WHERE guild_id = %s AND messages_sent > %s',
             (ctx.guild.id, messages)
         )
         msg_rank = c.fetchone()[0] + 1
@@ -110,7 +110,7 @@ def setup(bot):
 
         c = bot.db.cursor()
         c.execute(
-            'SELECT user_id, messages_sent FROM user_stats WHERE guild_id = ? ORDER BY messages_sent DESC LIMIT 3',
+            'SELECT user_id, messages_sent FROM user_stats WHERE guild_id = %s ORDER BY messages_sent DESC LIMIT 3',
             (guild.id,)
         )
         top = c.fetchall()

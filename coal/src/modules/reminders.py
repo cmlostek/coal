@@ -14,8 +14,8 @@ def setup(bot):
     c = bot.db.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS reminders (
         id         TEXT PRIMARY KEY,
-        user_id    INTEGER NOT NULL,
-        channel_id INTEGER NOT NULL,
+        user_id    BIGINT NOT NULL,
+        channel_id BIGINT NOT NULL,
         remind_at  TEXT NOT NULL,
         message    TEXT NOT NULL
     )''')
@@ -24,7 +24,7 @@ def setup(bot):
     def parse_duration(s):
         """Parse '1h30m2s' style strings into total seconds. Returns None if invalid."""
         pattern = re.compile(
-            r'(\d+)\s*(w(?:eek)?s?|d(?:ay)?s?|h(?:(?:ou)?r)?s?|m(?:in(?:ute)?s?)?|s(?:ec(?:ond)?s?)?)',
+            r'(\d+)\s*(w(%s:eek)%ss%s|d(%s:ay)%ss%s|h(%s:(%s:ou)%sr)%ss%s|m(%s:in(%s:ute)%ss%s)%s|s(%s:ec(%s:ond)%ss%s)%s)',
             re.IGNORECASE
         )
         matches = pattern.findall(s)
@@ -68,7 +68,7 @@ def setup(bot):
 
         c = bot.db.cursor()
         c.execute(
-            'INSERT INTO reminders (id, user_id, channel_id, remind_at, message) VALUES (?, ?, ?, ?, ?)',
+            'INSERT INTO reminders (id, user_id, channel_id, remind_at, message) VALUES (%s, %s, %s, %s, %s)',
             (rid, ctx.author.id, ctx.channel.id, remind_at.isoformat(), message)
         )
         bot.db.commit()
@@ -85,7 +85,7 @@ def setup(bot):
         """List all your active reminders."""
         c = bot.db.cursor()
         c.execute(
-            'SELECT id, remind_at, message FROM reminders WHERE user_id = ? ORDER BY remind_at ASC',
+            'SELECT id, remind_at, message FROM reminders WHERE user_id = %s ORDER BY remind_at ASC',
             (ctx.author.id,)
         )
         rows = c.fetchall()
@@ -115,12 +115,12 @@ def setup(bot):
         """Cancel a reminder by its ID. Usage: -cancelreminder A3F891C2"""
         rid = rid.upper()
         c = bot.db.cursor()
-        c.execute('SELECT message FROM reminders WHERE id = ? AND user_id = ?', (rid, ctx.author.id))
+        c.execute('SELECT message FROM reminders WHERE id = %s AND user_id = %s', (rid, ctx.author.id))
         row = c.fetchone()
         if not row:
             await ctx.send(f'No reminder with ID `{rid}` found for you.')
             return
-        c.execute('DELETE FROM reminders WHERE id = ?', (rid,))
+        c.execute('DELETE FROM reminders WHERE id = %s', (rid,))
         bot.db.commit()
         preview = row[0][:80] + '…' if len(row[0]) > 80 else row[0]
         await ctx.send(f'Cancelled reminder `{rid}`: {preview}')
@@ -133,7 +133,7 @@ def setup(bot):
                 now = datetime.datetime.utcnow().isoformat()
                 c = bot.db.cursor()
                 c.execute(
-                    'SELECT id, user_id, channel_id, message FROM reminders WHERE remind_at <= ?',
+                    'SELECT id, user_id, channel_id, message FROM reminders WHERE remind_at <= %s',
                     (now,)
                 )
                 due = c.fetchall()
@@ -154,7 +154,7 @@ def setup(bot):
                         print(f'[reminders] Failed to fire {rid}: {e}')
                     fired.append(rid)
                 for rid in fired:
-                    c.execute('DELETE FROM reminders WHERE id = ?', (rid,))
+                    c.execute('DELETE FROM reminders WHERE id = %s', (rid,))
                 bot.db.commit()
             except Exception as e:
                 print(f'[reminders] Loop error: {e}')

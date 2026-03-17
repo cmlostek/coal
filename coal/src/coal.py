@@ -2,7 +2,7 @@
 
 import discord
 import os
-import sqlite3 as sql
+import psycopg2
 from dotenv import load_dotenv
 from discord.ext.commands import Bot
 from mcstatus import JavaServer
@@ -18,7 +18,7 @@ load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 MINECRAFT_SERVER_IP = os.getenv('MINECRAFT_SERVER_IP')
 MINECRAFT_SERVER_PORT = os.getenv('MINECRAFT_SERVER_PORT')
-DB = os.getenv('DATABASE')
+DATABASE_URL = os.getenv('DATABASE_URL')
 
 # Bot Instance
 
@@ -32,57 +32,30 @@ async def on_ready():
     print(f'We have logged in as {bot.user}')
 
     # Initialize the database connection and ensure tables exist
-    bot.db = sql.connect(DB, check_same_thread=False)
-    print(f'Connected to database: {DB}')
+    bot.db = psycopg2.connect(DATABASE_URL)
+    print(f'Connected to Supabase database.')
 
-    # Ensure the death_log table exists
     c = bot.db.cursor()
 
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS death_log (
+            log_id  SERIAL PRIMARY KEY,
+            id      TEXT,
+            cntr    INTEGER,
+            reason  TEXT
+        )
+    ''')
+    print('Ensured table: death_log')
 
-    # Check if death_log table exists
-    c.execute('''SELECT count(name)
-                 FROM sqlite_master
-                 WHERE type = 'table'
-                   AND name = 'death_log' ''')
-    if c.fetchone()[0] == 0:
-        c.execute('''
-                  CREATE TABLE IF NOT EXISTS death_log
-                  (
-                      log_id
-                      INTEGER
-                      PRIMARY
-                      KEY
-                      AUTOINCREMENT,
-                      user_id
-                      TEXT,
-                      cntr
-                      INTEGER,
-                      reason
-                      TEXT
-                  )
-                  ''')
-        print('Created table: death_log')
-
-    # Check if balances table exists
-    c.execute('''SELECT count(name)
-                 FROM sqlite_master
-                 WHERE type = 'table'
-                   AND name = 'balances' ''')
-    if c.fetchone()[0] == 0:
-        c.execute('''
-                  CREATE TABLE IF NOT EXISTS balances
-                  (
-                      user_id
-                      INTEGER
-                      PRIMARY
-                      KEY,
-                      balance
-                      INTEGER
-                      DEFAULT
-                      1000
-                  )
-                  ''')
-        print('Created table: balances')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS balances (
+            user_id    BIGINT PRIMARY KEY,
+            balance    INTEGER DEFAULT 1000,
+            last_daily TEXT DEFAULT NULL,
+            last_work  TEXT DEFAULT NULL
+        )
+    ''')
+    print('Ensured table: balances')
     bot.db.commit()
 
 
@@ -113,8 +86,8 @@ async def on_ready():
 # Run the bot
 
 if __name__ == '__main__':
-    if not TOKEN or not MINECRAFT_SERVER_IP:
-        print("Error: Your bot token or Minecraft server address are not set. Please check your environment variables.")
+    if not TOKEN or not MINECRAFT_SERVER_IP or not DATABASE_URL:
+        print("Error: DISCORD_TOKEN, MINECRAFT_SERVER_IP, or DATABASE_URL is not set. Please check your environment variables.")
     else:
         try:
             bot.run(TOKEN)
