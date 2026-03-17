@@ -62,7 +62,7 @@ if __name__ == '__main__':
             # Connect to DB before starting the event loop so the blocking
             # network call does not freeze the Discord heartbeat.
             print('Connecting to Supabase...')
-            bot.db = psycopg2.connect(DATABASE_URL)
+            bot.db = psycopg2.connect(DATABASE_URL, connect_timeout=10)
             print('Connected to Supabase database.')
 
             c = bot.db.cursor()
