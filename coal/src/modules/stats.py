@@ -29,7 +29,7 @@ def setup(bot):
             c.execute('''
                 INSERT INTO user_stats (user_id, guild_id, messages_sent, voice_seconds)
                 VALUES (%s, %s, 1, 0)
-                ON CONFLICT(user_id, guild_id) DO UPDATE SET messages_sent = messages_sent + 1
+                ON CONFLICT(user_id, guild_id) DO UPDATE SET messages_sent = user_stats.messages_sent + 1
             ''', (message.author.id, message.guild.id))
             bot.db.commit()
         except Exception as e:
@@ -51,7 +51,7 @@ def setup(bot):
                     c.execute('''
                         INSERT INTO user_stats (user_id, guild_id, messages_sent, voice_seconds)
                         VALUES (%s, %s, 0, %s)
-                        ON CONFLICT(user_id, guild_id) DO UPDATE SET voice_seconds = voice_seconds + %s
+                        ON CONFLICT(user_id, guild_id) DO UPDATE SET voice_seconds = user_stats.voice_seconds + %s
                     ''', (member.id, member.guild.id, secs, secs))
                     bot.db.commit()
                 except Exception as e:
