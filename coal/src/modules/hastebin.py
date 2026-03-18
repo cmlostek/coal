@@ -10,7 +10,7 @@ def setup(bot):
     """Setup function to register commands with the bot"""
 
     @bot.command(name='haste', aliases=['hastebin', 'paste', 'pb'])
-    async def haste(ctx, *, content: str = None):
+    async def haste(ctx, *, content: str | None = None):
         """Upload text or a code block to hastebin.
         Usage: -haste <text>  or  -haste ```lang\\ncode```"""
 
@@ -36,7 +36,7 @@ def setup(bot):
             )
             return
 
-        if not content.strip():
+        if not content or not content.strip():
             await ctx.send('Cannot upload empty content.')
             return
 

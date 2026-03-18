@@ -4,14 +4,14 @@ import random
 import discord
 from discord import user
 from discord.ext import commands
-import psycopg2
+import psycopg2  # type: ignore[import-untyped]
 
 
 def setup(bot):
     """Setup function to register commands with the bot"""
 
     @bot.command()
-    async def balance(ctx, user: discord.Member = None):
+    async def balance(ctx, user: discord.Member | None = None):
         user_id = user.id if user else ctx.author.id
 
         try:

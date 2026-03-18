@@ -136,7 +136,7 @@ def setup(bot):
             # Check if the channel is actually a voice channel (2) to avoid errors
             if channel.type != discord.ChannelType.voice:
                 print(f'Channel {VOICE_CHANNEL} is not a voice channel. Skipping update.')
-                update_voice_channel.stop()  # Stop the task if it's the wrong channel type
+                update_voice_channel.stop()  # type: ignore[attr-defined]  # Stop the task if it's the wrong channel type
                 return
 
             status_data = await get_server_status()
@@ -162,7 +162,7 @@ def setup(bot):
 
         except ValueError:
             print(f'Error: VOICE_CHANNEL environment variable "{VOICE_CHANNEL}" is not a valid integer ID.')
-            update_voice_channel.stop()
+            update_voice_channel.stop()  # type: ignore[attr-defined]
 
         except Exception as e:
             print(f'Error in voice channel update task: {e}')
