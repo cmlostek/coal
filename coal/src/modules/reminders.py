@@ -157,6 +157,7 @@ def setup(bot):
                     c.execute('DELETE FROM reminders WHERE id = %s', (rid,))
                 bot.db.commit()
             except Exception as e:
+                bot.db.rollback()
                 print(f'[reminders] Loop error: {e}')
             await asyncio.sleep(15)
 

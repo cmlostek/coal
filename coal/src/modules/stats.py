@@ -24,13 +24,17 @@ def setup(bot):
     async def _on_message_stats(message):
         if message.author.bot or not message.guild:
             return
-        c = bot.db.cursor()
-        c.execute('''
-            INSERT INTO user_stats (user_id, guild_id, messages_sent, voice_seconds)
-            VALUES (%s, %s, 1, 0)
-            ON CONFLICT(user_id, guild_id) DO UPDATE SET messages_sent = messages_sent + 1
-        ''', (message.author.id, message.guild.id))
-        bot.db.commit()
+        try:
+            c = bot.db.cursor()
+            c.execute('''
+                INSERT INTO user_stats (user_id, guild_id, messages_sent, voice_seconds)
+                VALUES (%s, %s, 1, 0)
+                ON CONFLICT(user_id, guild_id) DO UPDATE SET messages_sent = messages_sent + 1
+            ''', (message.author.id, message.guild.id))
+            bot.db.commit()
+        except Exception as e:
+            bot.db.rollback()
+            print(f'[stats] on_message error: {e}')
 
     # Use add_listener so we don't overwrite the on_message handler in levels.py
     bot.add_listener(_on_message_stats, 'on_message')
@@ -42,13 +46,17 @@ def setup(bot):
         elif before.channel is not None and after.channel is None:
             if key in _voice_joins:
                 secs = int((datetime.datetime.utcnow() - _voice_joins.pop(key)).total_seconds())
-                c = bot.db.cursor()
-                c.execute('''
-                    INSERT INTO user_stats (user_id, guild_id, messages_sent, voice_seconds)
-                    VALUES (%s, %s, 0, %s)
-                    ON CONFLICT(user_id, guild_id) DO UPDATE SET voice_seconds = voice_seconds + %s
-                ''', (member.id, member.guild.id, secs, secs))
-                bot.db.commit()
+                try:
+                    c = bot.db.cursor()
+                    c.execute('''
+                        INSERT INTO user_stats (user_id, guild_id, messages_sent, voice_seconds)
+                        VALUES (%s, %s, 0, %s)
+                        ON CONFLICT(user_id, guild_id) DO UPDATE SET voice_seconds = voice_seconds + %s
+                    ''', (member.id, member.guild.id, secs, secs))
+                    bot.db.commit()
+                except Exception as e:
+                    bot.db.rollback()
+                    print(f'[stats] on_voice_update error: {e}')
 
     bot.add_listener(_on_voice_update, 'on_voice_state_update')
 

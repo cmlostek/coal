@@ -22,38 +22,42 @@ def setup(bot):
 
     async def add_xp(user_id, xp_amount):
         '''Add XP to user and handle level ups'''
-        c = bot.db.cursor()
+        try:
+            c = bot.db.cursor()
 
-        # Insert or update user record
-        c.execute('INSERT INTO levels (id, level, xp) VALUES (%s, 1, 0) ON CONFLICT (id) DO NOTHING', (user_id,))
-        c.execute('UPDATE levels SET xp = xp + %s WHERE id = %s', (xp_amount, user_id))
-        bot.db.commit()
-
-        # Check for level up
-        c.execute('SELECT level, xp FROM levels WHERE id = %s', (user_id,))
-        current_level, current_xp = c.fetchone()
-
-        xp_needed = calculate_xp_needed(current_level)
-        while current_xp >= xp_needed:
-            current_xp -= xp_needed
-            current_level += 1
-
-            # Update database immediately
-            c.execute('UPDATE levels SET level = %s, xp = %s WHERE id = %s', (current_level, current_xp, user_id))
+            # Insert or update user record
+            c.execute('INSERT INTO levels (id, level, xp) VALUES (%s, 1, 0) ON CONFLICT (id) DO NOTHING', (user_id,))
+            c.execute('UPDATE levels SET xp = xp + %s WHERE id = %s', (xp_amount, user_id))
             bot.db.commit()
 
-            try:
-                level_channel = await bot.fetch_channel(1433244417367605318)
-                user = await bot.fetch_user(user_id)
-                if user and level_channel:
-                    await level_channel.send(
-                        f"Congratulations {user.mention}! You've reached level {current_level}!")
-            except Exception as e:
-                print(f"Failed to send level up message: {e}")
+            # Check for level up
+            c.execute('SELECT level, xp FROM levels WHERE id = %s', (user_id,))
+            current_level, current_xp = c.fetchone()
 
             xp_needed = calculate_xp_needed(current_level)
+            while current_xp >= xp_needed:
+                current_xp -= xp_needed
+                current_level += 1
 
-        return current_level, current_xp
+                # Update database immediately
+                c.execute('UPDATE levels SET level = %s, xp = %s WHERE id = %s', (current_level, current_xp, user_id))
+                bot.db.commit()
+
+                try:
+                    level_channel = await bot.fetch_channel(1433244417367605318)
+                    user = await bot.fetch_user(user_id)
+                    if user and level_channel:
+                        await level_channel.send(
+                            f"Congratulations {user.mention}! You've reached level {current_level}!")
+                except Exception as e:
+                    print(f"Failed to send level up message: {e}")
+
+                xp_needed = calculate_xp_needed(current_level)
+
+            return current_level, current_xp
+        except Exception as e:
+            bot.db.rollback()
+            print(f'[levels] add_xp error: {e}')
 
     @bot.event
     async def on_message(message):
