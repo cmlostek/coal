@@ -2,8 +2,12 @@
 
 import re
 import io
+import sys
+import textwrap
+import traceback
 import datetime
 import asyncio
+from contextlib import redirect_stdout
 from PIL import Image
 import discord
 from discord.ext import commands
@@ -152,3 +156,48 @@ def setup(bot):
 
         except ValueError:
             await ctx.send("Invalid date/time format! Please use YYYY-MM-DD HH:MM")
+
+    @bot.command(name='eval', aliases=['e', 'exec'])
+    async def eval_cmd(ctx, *, code: str):
+        '''Owner-only: evaluate a Python code block. Usage: -eval ```py\ncode\n```'''
+        if ctx.author.id != (await bot.application_info()).owner.id:
+            await ctx.send('Only the bot owner can use this command.')
+            return
+
+        # Strip code block formatting if present
+        if code.startswith('```') and code.endswith('```'):
+            code = re.sub(r'^```(?:py(?:thon)?)?\n?', '', code)
+            code = re.sub(r'\n?```$', '', code)
+
+        stdout = io.StringIO()
+        # Wrap in async function to support top-level await
+        wrapped = f'async def _eval_func():\n{textwrap.indent(code, "    ")}'
+
+        env = {
+            'bot': bot,
+            'ctx': ctx,
+            'discord': discord,
+            'commands': commands,
+            '__import__': __import__,
+        }
+
+        try:
+            exec(wrapped, env)
+            with redirect_stdout(stdout):
+                result = await env['_eval_func']()
+        except Exception:
+            output = stdout.getvalue()
+            err = traceback.format_exc()
+            combined = (output + err).strip()
+            await ctx.send(f'```py\n{combined[:1990]}\n```')
+            return
+
+        output = stdout.getvalue()
+        if result is not None:
+            output += str(result)
+        output = output.strip()
+
+        if output:
+            await ctx.send(f'```py\n{output[:1990]}\n```')
+        else:
+            await ctx.message.add_reaction('✅')
