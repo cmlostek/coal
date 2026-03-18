@@ -32,12 +32,12 @@ def setup(bot):
                 # Case 2: First argument is an ID/mention ('0' or digits) 
                 user_id_str = first
                 # Use str.strip() to remove punctuation from each word
-                reason = ' '.join(word.strip('.,!%s;:\'\"') for word in args[1:]) if len(args) > 1 else None
+                reason = ' '.join(word.strip('.,!%;:\'\"') for word in args[1:]) if len(args) > 1 else None
             else:
                 # Case 3: No ID provided (first arg is part of reason) - use invoker's ID
                 user_id_str = str(ctx.author.id)
                 # Use str.strip() to remove punctuation from each word
-                reason = ' '.join(word.strip('.,!%s;:\'\"') for word in args)
+                reason = ' '.join(word.strip('.,!%;:\'\"') for word in args)
 
         # Clean up the ID string to only contain digits if it was a mention
         digits = ''.join(ch for ch in user_id_str if ch.isdigit())
