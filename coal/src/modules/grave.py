@@ -48,15 +48,21 @@ def setup(bot):
             final_user_id = digits
 
         # Increment the death count and log the death using the database
-        c = bot.db.cursor()
-        # Get the next sequential death number (cntr)
-        c.execute('SELECT MAX(cntr) FROM death_log')
-        row = c.fetchone()
-        num = (row[0] if row and row[0] is not None else 0) + 1
+        try:
+            c = bot.db.cursor()
+            # Get the next sequential death number (cntr)
+            c.execute('SELECT MAX(cntr) FROM death_log')
+            row = c.fetchone()
+            num = (row[0] if row and row[0] is not None else 0) + 1
 
-        # Insert: letting log_id AUTOINCREMENT, storing user_id, cntr, and reason
-        c.execute('INSERT INTO death_log(id, cntr, reason) VALUES (%s,%s,%s)', (final_user_id, num, reason))
-        bot.db.commit()
+            # Insert: letting log_id AUTOINCREMENT, storing user_id, cntr, and reason
+            c.execute('INSERT INTO death_log(id, cntr, reason) VALUES (%s,%s,%s)', (final_user_id, num, reason))
+            bot.db.commit()
+        except Exception as e:
+            bot.db.rollback()
+            print(f'[grave] death log error: {e}')
+            await ctx.send('Error logging death to the database.')
+            return
 
         # Notify channel / user
         if final_user_id == '0':
