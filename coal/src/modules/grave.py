@@ -1,4 +1,4 @@
-"""Graveyard/Death log commands module"""
+"""Graveyard / Death log commands module"""
 
 import io
 import discord
@@ -29,7 +29,7 @@ def setup(bot):
         else:
             first = args[0]
             if first == '0' or first.startswith('<@') or first.isdigit():
-                # Case 2: First argument is an ID/mention ('0' or digits) 
+                # Case 2: First argument is an ID/mention ('0' or digits)
                 user_id_str = first
                 # Use str.strip() to remove punctuation from each word
                 reason = ' '.join(word.strip('.,!%;:\'\"') for word in args[1:]) if len(args) > 1 else None
