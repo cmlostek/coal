@@ -2,10 +2,15 @@
 
 import discord
 import os
-import psycopg2
 from dotenv import load_dotenv
+import psycopg2
 from discord.ext.commands import Bot
 from mcstatus import JavaServer
+
+
+class CoalBot(Bot):
+    db: psycopg2.extensions.connection
+
 
 # Bot Intents
 
@@ -22,7 +27,7 @@ DATABASE_URL = os.getenv('DATABASE_URL')
 
 # Bot Instance
 
-bot = Bot(command_prefix='-' or '!' or '?', intents=intents, help_command=None)
+bot = CoalBot(command_prefix='-' or '!' or '?', intents=intents, help_command=None)
 
 
 # On Ready Event
