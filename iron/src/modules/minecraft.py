@@ -96,29 +96,6 @@ class Minecraft(commands.Cog):
 
         await ctx.send(embed=embed)
 
-    @commands.command(name='join')
-    async def join(self, ctx, channel: str):
-        """Join a voice channel by ID or name."""
-        vc = (self.bot.get_channel(int(channel))
-              if channel.isdigit()
-              else next((c for c in ctx.guild.voice_channels if c.name == channel), None))
-        if not vc:
-            return await ctx.send(f"Voice channel `{channel}` not found.")
-        try:
-            await vc.connect()
-            await ctx.send(f'Joined **{vc.name}**.')
-        except Exception as exc:
-            await ctx.send(f'Failed to join: {exc}')
-
-    @commands.command(name='leave')
-    async def leave(self, ctx):
-        """Leave the current voice channel."""
-        if ctx.voice_client:
-            await ctx.voice_client.disconnect()
-            await ctx.send('Left the voice channel.')
-        else:
-            await ctx.send("I'm not in a voice channel.")
-
 
 async def setup(bot):
     await bot.add_cog(Minecraft(bot))
