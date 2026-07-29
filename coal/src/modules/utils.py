@@ -44,7 +44,7 @@ def setup(bot):
             value="`remind`, `reminders`, `cancelreminder`",
             inline=False,
         )
-        embed.add_field(name="Stats", value="`stats`, `serverstats`", inline=False)
+        embed.add_field(name="Stats", value="`stats`, `serverstats`, `leaderboard`", inline=False)
         await ctx.send(embed=embed)
 
     @bot.command()
