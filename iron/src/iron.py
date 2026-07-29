@@ -151,6 +151,14 @@ DB_TABLES = [
         tasks_late             INTEGER DEFAULT 0,
         assignments_completed  INTEGER DEFAULT 0
     )''',
+    # ── Message / voice activity stats (running totals per user/guild) ────────
+    '''CREATE TABLE IF NOT EXISTS activity_stats (
+        user_id       INTEGER NOT NULL,
+        guild_id      INTEGER NOT NULL,
+        messages      INTEGER DEFAULT 0,
+        voice_seconds INTEGER DEFAULT 0,
+        PRIMARY KEY (user_id, guild_id)
+    )''',
 ]
 
 

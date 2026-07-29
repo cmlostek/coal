@@ -1,21 +1,41 @@
 """
-modules/stats.py – Task & assignment completion statistics with matplotlib graphs.
+modules/stats.py – Task & assignment completion statistics with matplotlib graphs,
+plus message and voice-activity tracking.
 
 Commands
 ────────
-  !stats           – your completion dashboard with graph
-  !stats week      – last 7 days bar chart
-  !stats month     – last 30 days chart
-  !stats leaderboard – server-wide completion leaderboard
+  !stats             – your completion dashboard with graph (incl. message/voice rank)
+  !stats week        – last 7 days bar chart
+  !stats month       – last 30 days chart
+  !stats leaderboard – paginated server leaderboard (Tasks / Messages / Voice)
 """
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import asyncio
 import io
 import logging
+import time
 from datetime import datetime, timezone, timedelta
 
 log = logging.getLogger(__name__)
+
+
+def _fmt_duration(seconds: int) -> str:
+    """Format a number of seconds as a compact human-readable duration."""
+    seconds = int(seconds)
+    if seconds < 60:
+        return f'{seconds}s'
+    minutes, sec = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    days, hours = divmod(hours, 24)
+    parts = []
+    if days:
+        parts.append(f'{days}d')
+    if hours:
+        parts.append(f'{hours}h')
+    if minutes and not days:
+        parts.append(f'{minutes}m')
+    return ' '.join(parts) if parts else f'{sec}s'
 
 
 def _requires_matplotlib():
@@ -79,6 +99,121 @@ class Stats(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        # (guild_id, user_id) -> monotonic timestamp when the current voice
+        # session started (or was last checkpointed).
+        self._voice_sessions: dict[tuple[int, int], float] = {}
+
+    async def cog_load(self):
+        # Seed sessions for anyone already in a voice channel when the cog loads.
+        now = time.monotonic()
+        for guild in self.bot.guilds:
+            for channel in guild.voice_channels:
+                for member in channel.members:
+                    if not member.bot:
+                        self._voice_sessions[(guild.id, member.id)] = now
+        self._voice_checkpoint.start()
+
+    async def cog_unload(self):
+        self._voice_checkpoint.cancel()
+        # Persist whatever voice time has accrued so a reload/shutdown keeps it.
+        await self._flush_voice_sessions()
+
+    # ── Activity tracking ─────────────────────────────────────────────────────
+
+    async def _add_messages(self, user_id: int, guild_id: int, amount: int = 1):
+        async with self.bot.db.cursor() as cur:
+            await cur.execute(
+                '''INSERT INTO activity_stats (user_id, guild_id, messages)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(user_id, guild_id)
+                   DO UPDATE SET messages = messages + excluded.messages''',
+                (user_id, guild_id, amount),
+            )
+        await self.bot.db.commit()
+
+    async def _add_voice_seconds(self, user_id: int, guild_id: int, amount: int):
+        if amount <= 0:
+            return
+        async with self.bot.db.cursor() as cur:
+            await cur.execute(
+                '''INSERT INTO activity_stats (user_id, guild_id, voice_seconds)
+                   VALUES (?, ?, ?)
+                   ON CONFLICT(user_id, guild_id)
+                   DO UPDATE SET voice_seconds = voice_seconds + excluded.voice_seconds''',
+                (user_id, guild_id, amount),
+            )
+        await self.bot.db.commit()
+
+    async def _flush_voice_sessions(self):
+        """Credit accrued time for every active session and reset its start."""
+        now = time.monotonic()
+        for (guild_id, user_id), started in list(self._voice_sessions.items()):
+            elapsed = int(now - started)
+            if elapsed > 0:
+                await self._add_voice_seconds(user_id, guild_id, elapsed)
+                self._voice_sessions[(guild_id, user_id)] = now
+
+    @tasks.loop(minutes=5)
+    async def _voice_checkpoint(self):
+        await self._flush_voice_sessions()
+
+    @_voice_checkpoint.before_loop
+    async def _before_checkpoint(self):
+        await self.bot.wait_until_ready()
+
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        if message.author.bot or not message.guild:
+            return
+        await self._add_messages(message.author.id, message.guild.id)
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):
+        if member.bot or not member.guild:
+            return
+        key = (member.guild.id, member.id)
+        # Joined a voice channel (from nothing).
+        if before.channel is None and after.channel is not None:
+            self._voice_sessions[key] = time.monotonic()
+        # Left voice entirely.
+        elif before.channel is not None and after.channel is None:
+            started = self._voice_sessions.pop(key, None)
+            if started is not None:
+                await self._add_voice_seconds(member.id, member.guild.id,
+                                              int(time.monotonic() - started))
+        # Moved between channels / mute-deafen change: keep the session running.
+        elif after.channel is not None and key not in self._voice_sessions:
+            self._voice_sessions[key] = time.monotonic()
+
+    async def _get_activity(self, user_id: int, guild_id: int):
+        """Return (messages, voice_seconds) for a user, including live session."""
+        async with self.bot.db.cursor() as cur:
+            await cur.execute(
+                'SELECT messages, voice_seconds FROM activity_stats WHERE user_id=? AND guild_id=?',
+                (user_id, guild_id),
+            )
+            row = await cur.fetchone()
+        messages = row['messages'] if row else 0
+        voice = row['voice_seconds'] if row else 0
+        started = self._voice_sessions.get((guild_id, user_id))
+        if started is not None:
+            voice += int(time.monotonic() - started)
+        return messages, voice
+
+    async def _activity_rank(self, user_id: int, guild_id: int, column: str):
+        """1-based rank of a user for the given activity column (None if unranked)."""
+        async with self.bot.db.cursor() as cur:
+            await cur.execute(
+                f'''SELECT user_id, {column} AS val FROM activity_stats
+                    WHERE guild_id=? AND {column} > 0
+                    ORDER BY {column} DESC''',
+                (guild_id,),
+            )
+            rows = await cur.fetchall()
+        for i, r in enumerate(rows, start=1):
+            if r['user_id'] == user_id:
+                return i, len(rows)
+        return None, len(rows)
 
     async def _get_stats(self, user_id: int, guild_id: int, days: int):
         cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).date().isoformat()
@@ -116,6 +251,13 @@ class Stats(commands.Cog):
             )
             pending_asgn = (await cur.fetchone())['cnt']
 
+        # Activity totals + server ranks
+        messages, voice = await self._get_activity(ctx.author.id, ctx.guild.id)
+        msg_rank, msg_total = await self._activity_rank(ctx.author.id, ctx.guild.id, 'messages')
+        voice_rank, voice_total = await self._activity_rank(ctx.author.id, ctx.guild.id, 'voice_seconds')
+        msg_val = f'{messages:,}' + (f' (#{msg_rank}/{msg_total})' if msg_rank else '')
+        voice_val = _fmt_duration(voice) + (f' (#{voice_rank}/{voice_total})' if voice_rank else '')
+
         embed = discord.Embed(
             title=f'📊 Stats — {ctx.author.display_name}',
             description=f'Last **14 days** • On-time rate: **{rate}%**',
@@ -127,6 +269,9 @@ class Stats(commands.Cog):
         embed.add_field(name='📚 Assignments Done', value=str(total_asgn), inline=True)
         embed.add_field(name='⬜ Pending Tasks', value=str(pending_tasks), inline=True)
         embed.add_field(name='⬜ Pending Assigns', value=str(pending_asgn), inline=True)
+        embed.add_field(name='💬 Messages', value=msg_val, inline=True)
+        embed.add_field(name='🎙️ Voice Time', value=voice_val, inline=True)
+        embed.add_field(name='​', value='​', inline=True)
 
         if not rows:
             embed.set_footer(text='Complete tasks with !task done to start tracking stats.')
@@ -189,42 +334,138 @@ class Stats(commands.Cog):
         embed.set_image(url='attachment://stats.png')
         await ctx.send(embed=embed, file=discord.File(buf, 'stats.png'))
 
-    @stats.command(name='leaderboard', aliases=['lb', 'top'])
-    async def stats_leaderboard(self, ctx):
-        """Server-wide task completion leaderboard (last 30 days)."""
+    # ── Leaderboard embed builders ────────────────────────────────────────────
+
+    @staticmethod
+    def _member_name(guild, user_id: int) -> str:
+        member = guild.get_member(user_id)
+        return member.display_name if member else f'User {user_id}'
+
+    async def _tasks_leaderboard_embed(self, guild) -> discord.Embed:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).date().isoformat()
         async with self.bot.db.cursor() as cur:
             await cur.execute(
                 '''SELECT user_id,
                           SUM(tasks_completed) as done,
-                          SUM(tasks_on_time)   as ot,
-                          SUM(assignments_completed) as asgn
+                          SUM(tasks_on_time)   as ot
                    FROM task_stats
                    WHERE guild_id = ? AND date >= ?
                    GROUP BY user_id
+                   HAVING done > 0
                    ORDER BY done DESC
                    LIMIT 10''',
-                (ctx.guild.id, cutoff),
+                (guild.id, cutoff),
             )
             rows = await cur.fetchall()
 
-        if not rows:
-            return await ctx.send('No stats data for this server yet.')
+        medals = ['🥇', '🥈', '🥉'] + ['🏅'] * 7
+        if rows:
+            lines = []
+            for i, r in enumerate(rows):
+                rate = round(r['ot'] / r['done'] * 100) if r['done'] else 0
+                lines.append(f'{medals[i]} **{self._member_name(guild, r["user_id"])}** '
+                             f'— {r["done"]} tasks ({rate}% on time)')
+            desc = '\n'.join(lines)
+        else:
+            desc = 'No task data for this server yet.'
+        return discord.Embed(title='🏆 Task Leaderboard — Last 30 Days',
+                             description=desc, color=0xF1C40F)
+
+    async def _messages_leaderboard_embed(self, guild) -> discord.Embed:
+        async with self.bot.db.cursor() as cur:
+            await cur.execute(
+                '''SELECT user_id, messages FROM activity_stats
+                   WHERE guild_id = ? AND messages > 0
+                   ORDER BY messages DESC LIMIT 10''',
+                (guild.id,),
+            )
+            rows = await cur.fetchall()
 
         medals = ['🥇', '🥈', '🥉'] + ['🏅'] * 7
-        lines = []
-        for i, r in enumerate(rows):
-            user = ctx.guild.get_member(r['user_id'])
-            name = user.display_name if user else f'User {r["user_id"]}'
-            rate = round(r['ot'] / r['done'] * 100) if r['done'] else 0
-            lines.append(f'{medals[i]} **{name}** — {r["done"]} tasks ({rate}% on time)')
+        if rows:
+            lines = [f'{medals[i]} **{self._member_name(guild, r["user_id"])}** '
+                     f'— {r["messages"]:,} messages' for i, r in enumerate(rows)]
+            desc = '\n'.join(lines)
+        else:
+            desc = 'No message activity tracked yet.'
+        return discord.Embed(title='💬 Message Leaderboard',
+                             description=desc, color=0x5865F2)
 
-        embed = discord.Embed(
-            title='🏆 Task Leaderboard — Last 30 Days',
-            description='\n'.join(lines),
-            color=0xF1C40F,
-        )
-        await ctx.send(embed=embed)
+    async def _voice_leaderboard_embed(self, guild) -> discord.Embed:
+        # Flush live sessions first so the board reflects ongoing calls.
+        await self._flush_voice_sessions()
+        async with self.bot.db.cursor() as cur:
+            await cur.execute(
+                '''SELECT user_id, voice_seconds FROM activity_stats
+                   WHERE guild_id = ? AND voice_seconds > 0
+                   ORDER BY voice_seconds DESC LIMIT 10''',
+                (guild.id,),
+            )
+            rows = await cur.fetchall()
+
+        medals = ['🥇', '🥈', '🥉'] + ['🏅'] * 7
+        if rows:
+            lines = [f'{medals[i]} **{self._member_name(guild, r["user_id"])}** '
+                     f'— {_fmt_duration(r["voice_seconds"])}' for i, r in enumerate(rows)]
+            desc = '\n'.join(lines)
+        else:
+            desc = 'No voice activity tracked yet.'
+        return discord.Embed(title='🎙️ Voice Leaderboard',
+                             description=desc, color=0x57F287)
+
+    @stats.command(name='leaderboard', aliases=['lb', 'top'])
+    async def stats_leaderboard(self, ctx):
+        """Server leaderboard — Tasks / Messages / Voice, switchable via buttons."""
+        view = LeaderboardView(self, ctx.guild)
+        embed = await self._tasks_leaderboard_embed(ctx.guild)
+        view.message = await ctx.send(embed=embed, view=view)
+
+
+class LeaderboardView(discord.ui.View):
+    """Button-paginated leaderboard: Tasks, Messages, Voice."""
+
+    def __init__(self, cog: 'Stats', guild, timeout: float = 120):
+        super().__init__(timeout=timeout)
+        self.cog = cog
+        self.guild = guild
+        self.message: discord.Message | None = None
+        self._set_active('tasks')
+
+    def _set_active(self, page: str):
+        for child in self.children:
+            if isinstance(child, discord.ui.Button):
+                child.disabled = child.custom_id == page
+
+    async def _show(self, interaction: discord.Interaction, page: str):
+        builders = {
+            'tasks': self.cog._tasks_leaderboard_embed,
+            'messages': self.cog._messages_leaderboard_embed,
+            'voice': self.cog._voice_leaderboard_embed,
+        }
+        embed = await builders[page](self.guild)
+        self._set_active(page)
+        await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label='Tasks', emoji='🏆', style=discord.ButtonStyle.primary, custom_id='tasks')
+    async def tasks_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._show(interaction, 'tasks')
+
+    @discord.ui.button(label='Messages', emoji='💬', style=discord.ButtonStyle.primary, custom_id='messages')
+    async def messages_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._show(interaction, 'messages')
+
+    @discord.ui.button(label='Voice', emoji='🎙️', style=discord.ButtonStyle.primary, custom_id='voice')
+    async def voice_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._show(interaction, 'voice')
+
+    async def on_timeout(self):
+        for child in self.children:
+            child.disabled = True
+        if self.message:
+            try:
+                await self.message.edit(view=self)
+            except discord.HTTPException:
+                pass
 
 
 async def setup(bot):
