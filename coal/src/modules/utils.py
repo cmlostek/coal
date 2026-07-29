@@ -32,7 +32,7 @@ def setup(bot):
         embed.add_field(name="Minecraft", value="`status`", inline=False)
         embed.add_field(
             name="Economy",
-            value="`balance`, `daily`, `leaderboard`, `coinflip`, `roll`, `slots`, `give`, `rob`, `scratch`",
+            value="`balance`, `daily`, `richest`, `coinflip`, `roll`, `slots`, `give`, `rob`, `scratch`",
             inline=False,
         )
         embed.add_field(

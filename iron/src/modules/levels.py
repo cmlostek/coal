@@ -88,22 +88,21 @@ class Levels(commands.Cog):
 
     @commands.command(name='top', aliases=['lvltop', 'levelboard'])
     async def top(self, ctx):
-        """Top 10 users by level."""
+        """Open the unified leaderboard on the Levels page."""
+        stats = self.bot.get_cog('Stats')
+        if stats is not None:
+            return await stats.send_leaderboard(ctx, 'levels')
+        # Fallback if the Stats cog failed to load.
         async with self.bot.db.cursor() as cur:
             await cur.execute('SELECT id, level, xp FROM levels ORDER BY level DESC, xp DESC LIMIT 10')
             rows = await cur.fetchall()
-
         if not rows:
             return await ctx.send('No users on the leaderboard yet.')
-
         medals = ['🥇', '🥈', '🥉'] + ['🏅'] * 7
         embed = discord.Embed(title='⚡ Level Leaderboard', color=discord.Color.gold())
         for i, row in enumerate(rows):
-            try:
-                user = ctx.guild.get_member(row['id']) or await self.bot.fetch_user(row['id'])
-                name = user.display_name
-            except Exception:
-                name = f'User {row["id"]}'
+            user = ctx.guild.get_member(row['id'])
+            name = user.display_name if user else f'User {row["id"]}'
             total = sum(_xp_needed(l) for l in range(1, row['level'])) + row['xp']
             embed.add_field(
                 name=f'{medals[i]} {name}',

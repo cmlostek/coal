@@ -228,13 +228,51 @@ def setup(bot):
         embed.set_footer(text=f"Server ID: {guild.id}")
         await ctx.send(embed=embed)
 
-    # ── Paginated activity leaderboard (Messages / Voice via buttons) ─────────
+    # ── Unified paginated leaderboard (Levels / Economy / Messages / Voice) ───
 
     _medals = ["🥇", "🥈", "🥉"] + ["🏅"] * 7
+    _PAGES = ["levels", "economy", "messages", "voice"]
 
     def _member_name(guild, user_id):
         member = guild.get_member(user_id)
         return member.display_name if member else f"User {user_id}"
+
+    def _xp_needed(level):
+        return int(10 * (1.5 ** (level - 1)))
+
+    def _level_total_xp(level, xp):
+        return sum(_xp_needed(lvl) for lvl in range(1, level)) + xp
+
+    def _levels_leaderboard_embed(guild):
+        c = bot.db.cursor()
+        c.execute("SELECT id, level, xp FROM levels ORDER BY level DESC, xp DESC LIMIT 10")
+        rows = c.fetchall()
+        if rows:
+            desc = "\n".join(
+                f"{_medals[i]} **{_member_name(guild, uid)}** "
+                f"— Level {level} ({_level_total_xp(level, xp):,} XP)"
+                for i, (uid, level, xp) in enumerate(rows)
+            )
+        else:
+            desc = "No one has earned XP yet."
+        return discord.Embed(
+            title="⚡ Level Leaderboard", description=desc, color=0x3498DB
+        )
+
+    def _economy_leaderboard_embed(guild):
+        c = bot.db.cursor()
+        c.execute("SELECT user_id, balance FROM balances ORDER BY balance DESC LIMIT 10")
+        rows = c.fetchall()
+        if rows:
+            desc = "\n".join(
+                f"{_medals[i]} **{_member_name(guild, uid)}** — {bal:,} coins"
+                for i, (uid, bal) in enumerate(rows)
+            )
+        else:
+            desc = "No balances recorded yet."
+        return discord.Embed(
+            title="💰 Wealth Leaderboard", description=desc, color=0xF1C40F
+        )
 
     def _messages_leaderboard_embed(guild):
         c = bot.db.cursor()
@@ -277,14 +315,21 @@ def setup(bot):
             title="🎙️ Voice Leaderboard", description=desc, color=0x57F287
         )
 
-    class LeaderboardView(discord.ui.View):
-        """Button-paginated leaderboard: Messages, Voice."""
+    _builders = {
+        "levels": _levels_leaderboard_embed,
+        "economy": _economy_leaderboard_embed,
+        "messages": _messages_leaderboard_embed,
+        "voice": _voice_leaderboard_embed,
+    }
 
-        def __init__(self, guild, timeout=120):
+    class LeaderboardView(discord.ui.View):
+        """Button-paginated leaderboard: Levels, Economy, Messages, Voice."""
+
+        def __init__(self, guild, start_page="levels", timeout=120):
             super().__init__(timeout=timeout)
             self.guild = guild
             self.message = None
-            self._set_active("messages")
+            self._set_active(start_page)
 
         def _set_active(self, page):
             for child in self.children:
@@ -292,14 +337,27 @@ def setup(bot):
                     child.disabled = child.custom_id == page
 
         async def _show(self, interaction, page):
-            builder = (
-                _messages_leaderboard_embed
-                if page == "messages"
-                else _voice_leaderboard_embed
-            )
-            embed = builder(self.guild)
+            embed = _builders[page](self.guild)
             self._set_active(page)
             await interaction.response.edit_message(embed=embed, view=self)
+
+        @discord.ui.button(
+            label="Levels",
+            emoji="⚡",
+            style=discord.ButtonStyle.primary,
+            custom_id="levels",
+        )
+        async def levels_btn(self, interaction, button):
+            await self._show(interaction, "levels")
+
+        @discord.ui.button(
+            label="Economy",
+            emoji="💰",
+            style=discord.ButtonStyle.primary,
+            custom_id="economy",
+        )
+        async def economy_btn(self, interaction, button):
+            await self._show(interaction, "economy")
 
         @discord.ui.button(
             label="Messages",
@@ -328,9 +386,17 @@ def setup(bot):
                 except discord.HTTPException:
                     pass
 
+    async def _send_leaderboard(ctx, page="levels"):
+        """Send the unified paginated leaderboard, opened at the given page."""
+        if page not in _PAGES:
+            page = "levels"
+        view = LeaderboardView(ctx.guild, start_page=page)
+        view.message = await ctx.send(embed=_builders[page](ctx.guild), view=view)
+
+    # Expose so levels.py / economy.py shortcut commands can open the same view.
+    bot.send_leaderboard = _send_leaderboard
+
     @bot.command(name="leaderboard", aliases=["lb", "activity"])
     async def leaderboard(ctx):
-        """Server activity leaderboard — Messages / Voice, switchable via buttons."""
-        view = LeaderboardView(ctx.guild)
-        embed = _messages_leaderboard_embed(ctx.guild)
-        view.message = await ctx.send(embed=embed, view=view)
+        """Unified server leaderboard — Levels / Economy / Messages / Voice."""
+        await _send_leaderboard(ctx, "levels")

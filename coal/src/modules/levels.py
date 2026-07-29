@@ -112,6 +112,11 @@ def setup(bot):
     @bot.command()
     async def top(ctx):
         """Displays the top 10 users by level and experience"""
+        send = getattr(bot, "send_leaderboard", None)
+        if send is not None:
+            await send(ctx, "levels")
+            return
+        # Fallback if the stats module failed to load.
         c = bot.db.cursor()
         c.execute(
             "SELECT id, level, xp FROM levels ORDER BY level DESC, xp DESC LIMIT 10"

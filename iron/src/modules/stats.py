@@ -38,6 +38,15 @@ def _fmt_duration(seconds: int) -> str:
     return ' '.join(parts) if parts else f'{sec}s'
 
 
+def _xp_needed(level: int) -> int:
+    """XP required to clear a given level (mirrors levels.py)."""
+    return int(10 * (1.5 ** (level - 1)))
+
+
+def _level_total_xp(level: int, xp: int) -> int:
+    return sum(_xp_needed(l) for l in range(1, level)) + xp
+
+
 def _requires_matplotlib():
     try:
         import matplotlib
@@ -336,10 +345,48 @@ class Stats(commands.Cog):
 
     # ── Leaderboard embed builders ────────────────────────────────────────────
 
+    # Page order for the unified leaderboard view.
+    PAGES = ['levels', 'economy', 'tasks', 'messages', 'voice']
+
     @staticmethod
     def _member_name(guild, user_id: int) -> str:
         member = guild.get_member(user_id)
         return member.display_name if member else f'User {user_id}'
+
+    async def _levels_leaderboard_embed(self, guild) -> discord.Embed:
+        async with self.bot.db.cursor() as cur:
+            await cur.execute(
+                'SELECT id, level, xp FROM levels ORDER BY level DESC, xp DESC LIMIT 10'
+            )
+            rows = await cur.fetchall()
+
+        medals = ['🥇', '🥈', '🥉'] + ['🏅'] * 7
+        if rows:
+            lines = [f'{medals[i]} **{self._member_name(guild, r["id"])}** '
+                     f'— Level {r["level"]} ({_level_total_xp(r["level"], r["xp"]):,} XP)'
+                     for i, r in enumerate(rows)]
+            desc = '\n'.join(lines)
+        else:
+            desc = 'No one has earned XP yet.'
+        return discord.Embed(title='⚡ Level Leaderboard',
+                             description=desc, color=0x3498DB)
+
+    async def _economy_leaderboard_embed(self, guild) -> discord.Embed:
+        async with self.bot.db.cursor() as cur:
+            await cur.execute(
+                'SELECT user_id, balance FROM balances ORDER BY balance DESC LIMIT 10'
+            )
+            rows = await cur.fetchall()
+
+        medals = ['🥇', '🥈', '🥉'] + ['🏅'] * 7
+        if rows:
+            lines = [f'{medals[i]} **{self._member_name(guild, r["user_id"])}** '
+                     f'— {r["balance"]:,} coins' for i, r in enumerate(rows)]
+            desc = '\n'.join(lines)
+        else:
+            desc = 'No balances recorded yet.'
+        return discord.Embed(title='💰 Wealth Leaderboard',
+                             description=desc, color=0xF1C40F)
 
     async def _tasks_leaderboard_embed(self, guild) -> discord.Embed:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).date().isoformat()
@@ -413,23 +460,44 @@ class Stats(commands.Cog):
         return discord.Embed(title='🎙️ Voice Leaderboard',
                              description=desc, color=0x57F287)
 
+    async def _leaderboard_embed(self, page: str, guild) -> discord.Embed:
+        builders = {
+            'levels':   self._levels_leaderboard_embed,
+            'economy':  self._economy_leaderboard_embed,
+            'tasks':    self._tasks_leaderboard_embed,
+            'messages': self._messages_leaderboard_embed,
+            'voice':    self._voice_leaderboard_embed,
+        }
+        return await builders[page](guild)
+
+    async def send_leaderboard(self, ctx, page: str = 'levels'):
+        """Send the unified paginated leaderboard, opened at the given page."""
+        if page not in self.PAGES:
+            page = 'levels'
+        view = LeaderboardView(self, ctx.guild, start_page=page)
+        embed = await self._leaderboard_embed(page, ctx.guild)
+        view.message = await ctx.send(embed=embed, view=view)
+
+    @commands.command(name='leaderboard', aliases=['lb', 'boards'])
+    async def leaderboard_cmd(self, ctx):
+        """Unified server leaderboard — Levels / Economy / Tasks / Messages / Voice."""
+        await self.send_leaderboard(ctx, 'levels')
+
     @stats.command(name='leaderboard', aliases=['lb', 'top'])
     async def stats_leaderboard(self, ctx):
-        """Server leaderboard — Tasks / Messages / Voice, switchable via buttons."""
-        view = LeaderboardView(self, ctx.guild)
-        embed = await self._tasks_leaderboard_embed(ctx.guild)
-        view.message = await ctx.send(embed=embed, view=view)
+        """Open the unified leaderboard on the Tasks page."""
+        await self.send_leaderboard(ctx, 'tasks')
 
 
 class LeaderboardView(discord.ui.View):
-    """Button-paginated leaderboard: Tasks, Messages, Voice."""
+    """Button-paginated leaderboard: Levels, Economy, Tasks, Messages, Voice."""
 
-    def __init__(self, cog: 'Stats', guild, timeout: float = 120):
+    def __init__(self, cog: 'Stats', guild, start_page: str = 'levels', timeout: float = 120):
         super().__init__(timeout=timeout)
         self.cog = cog
         self.guild = guild
         self.message: discord.Message | None = None
-        self._set_active('tasks')
+        self._set_active(start_page)
 
     def _set_active(self, page: str):
         for child in self.children:
@@ -437,14 +505,17 @@ class LeaderboardView(discord.ui.View):
                 child.disabled = child.custom_id == page
 
     async def _show(self, interaction: discord.Interaction, page: str):
-        builders = {
-            'tasks': self.cog._tasks_leaderboard_embed,
-            'messages': self.cog._messages_leaderboard_embed,
-            'voice': self.cog._voice_leaderboard_embed,
-        }
-        embed = await builders[page](self.guild)
+        embed = await self.cog._leaderboard_embed(page, self.guild)
         self._set_active(page)
         await interaction.response.edit_message(embed=embed, view=self)
+
+    @discord.ui.button(label='Levels', emoji='⚡', style=discord.ButtonStyle.primary, custom_id='levels')
+    async def levels_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._show(interaction, 'levels')
+
+    @discord.ui.button(label='Economy', emoji='💰', style=discord.ButtonStyle.primary, custom_id='economy')
+    async def economy_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._show(interaction, 'economy')
 
     @discord.ui.button(label='Tasks', emoji='🏆', style=discord.ButtonStyle.primary, custom_id='tasks')
     async def tasks_btn(self, interaction: discord.Interaction, button: discord.ui.Button):

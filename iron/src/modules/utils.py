@@ -79,7 +79,7 @@ class Utils(commands.Cog):
         )
         embed.add_field(
             name='📊 Stats',
-            value='`!stats` · `!stats week` · `!stats month` · `!stats leaderboard`',
+            value='`!stats` · `!stats week` · `!stats month` · `!leaderboard`',
             inline=False,
         )
         embed.add_field(

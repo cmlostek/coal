@@ -60,11 +60,17 @@ def setup(bot):
         bot.db.commit()
             
 
-    @bot.command()
-    async def leaderboard(ctx):
+    @bot.command(name="richest", aliases=["baltop"])
+    async def richest(ctx):
+        """Open the unified leaderboard on the Wealth page."""
+        send = getattr(bot, "send_leaderboard", None)
+        if send is not None:
+            await send(ctx, "economy")
+            return
+        # Fallback if the stats module failed to load.
         try:
             c = bot.db.cursor()
-            c.execute('SELECT user_id, balance FROM balances ORDER BY balance DESC')
+            c.execute('SELECT user_id, balance FROM balances ORDER BY balance DESC LIMIT 10')
             results = c.fetchall()
 
             if not results:
@@ -77,7 +83,7 @@ def setup(bot):
                 color=discord.Color.gold()
             )
 
-            for i, (user_id, balance) in enumerate(results[:10], 1):
+            for i, (user_id, balance) in enumerate(results, 1):
                 try:
                     user = await bot.fetch_user(user_id)
                     username = user.name
@@ -96,7 +102,7 @@ def setup(bot):
 
         except psycopg2.Error as e:
             await ctx.send(f"Error accessing leaderboard: {e}")
-            print(f"Database error in leaderboard command: {e}")
+            print(f"Database error in richest command: {e}")
 
     @bot.command()
     async def give(ctx, user: discord.Member, amount: int):

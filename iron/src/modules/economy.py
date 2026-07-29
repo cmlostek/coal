@@ -78,26 +78,24 @@ class Economy(commands.Cog):
             color=discord.Color.gold(),
         ))
 
-    @commands.command(name='leaderboard', aliases=['richest'])
-    async def leaderboard(self, ctx):
-        """Top 10 richest users."""
+    @commands.command(name='richest', aliases=['baltop'])
+    async def richest(self, ctx):
+        """Open the unified leaderboard on the Wealth page."""
+        stats = self.bot.get_cog('Stats')
+        if stats is not None:
+            return await stats.send_leaderboard(ctx, 'economy')
+        # Fallback if the Stats cog failed to load.
         async with self.bot.db.cursor() as cur:
             await cur.execute('SELECT user_id, balance FROM balances ORDER BY balance DESC LIMIT 10')
             rows = await cur.fetchall()
-
         if not rows:
             return await ctx.send('No balances recorded yet.')
-
         medals = ['🥇', '🥈', '🥉'] + ['🏅'] * 7
         embed = discord.Embed(title='💰 Wealth Leaderboard', color=discord.Color.gold())
         for i, row in enumerate(rows):
-            try:
-                user = ctx.guild.get_member(row['user_id']) or await self.bot.fetch_user(row['user_id'])
-                name = user.display_name
-            except Exception:
-                name = f'User {row["user_id"]}'
+            user = ctx.guild.get_member(row['user_id'])
+            name = user.display_name if user else f'User {row["user_id"]}'
             embed.add_field(name=f'{medals[i]} {name}', value=f'{row["balance"]:,} coins', inline=False)
-        embed.set_footer(text=f'Requested by {ctx.author.display_name}')
         await ctx.send(embed=embed)
 
     @commands.command(name='give')
