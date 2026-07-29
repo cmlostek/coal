@@ -234,8 +234,10 @@ def setup(bot):
     _PAGES = ["levels", "economy", "messages", "voice"]
 
     def _member_name(guild, user_id):
-        member = guild.get_member(user_id)
-        return member.display_name if member else f"User {user_id}"
+        # A mention renders as the username client-side without needing the
+        # (privileged) members intent, and works even for users not in the
+        # guild's member cache. It displays a name but does not ping in embeds.
+        return f"<@{user_id}>"
 
     def _xp_needed(level):
         return int(10 * (1.5 ** (level - 1)))
@@ -249,7 +251,7 @@ def setup(bot):
         rows = c.fetchall()
         if rows:
             desc = "\n".join(
-                f"{_medals[i]} **{_member_name(guild, uid)}** "
+                f"{_medals[i]} {_member_name(guild, uid)} "
                 f"— Level {level} ({_level_total_xp(level, xp):,} XP)"
                 for i, (uid, level, xp) in enumerate(rows)
             )
@@ -265,7 +267,7 @@ def setup(bot):
         rows = c.fetchall()
         if rows:
             desc = "\n".join(
-                f"{_medals[i]} **{_member_name(guild, uid)}** — {bal:,} coins"
+                f"{_medals[i]} {_member_name(guild, uid)} — {bal:,} coins"
                 for i, (uid, bal) in enumerate(rows)
             )
         else:
@@ -285,7 +287,7 @@ def setup(bot):
         rows = c.fetchall()
         if rows:
             desc = "\n".join(
-                f"{_medals[i]} **{_member_name(guild, uid)}** — {msgs:,} messages"
+                f"{_medals[i]} {_member_name(guild, uid)} — {msgs:,} messages"
                 for i, (uid, msgs) in enumerate(rows)
             )
         else:
@@ -306,7 +308,7 @@ def setup(bot):
         rows = c.fetchall()
         if rows:
             desc = "\n".join(
-                f"{_medals[i]} **{_member_name(guild, uid)}** — {_fmt_duration(secs)}"
+                f"{_medals[i]} {_member_name(guild, uid)} — {_fmt_duration(secs)}"
                 for i, (uid, secs) in enumerate(rows)
             )
         else:
