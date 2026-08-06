@@ -127,7 +127,7 @@ def setup(bot):
 
     @bot.command(
         name="someone",
-        description="Pings a random member. Used in reply to a message, deletes that message and pings a random user instead.",
+        description="Pings a random member. Used in reply to a message, deletes the invoking command message and pings a random user instead.",
     )
     async def someone(ctx):
         members = [m for m in ctx.guild.members if not m.bot]
@@ -138,8 +138,7 @@ def setup(bot):
 
         if ctx.message.reference is not None:
             try:
-                replied = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-                await replied.delete()
+                await ctx.message.delete()
             except (discord.NotFound, discord.Forbidden):
                 pass
 
