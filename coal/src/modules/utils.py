@@ -3,6 +3,7 @@
 import asyncio
 import datetime
 import io
+import random
 import re
 import sys
 import textwrap
@@ -26,7 +27,7 @@ def setup(bot):
         )
         embed.add_field(
             name="Utility",
-            value="`ping`, `greet`, `echo`, `color`, `whois`, `snipe`, `haste`",
+            value="`ping`, `greet`, `echo`, `color`, `whois`, `snipe`, `haste`, `someone`",
             inline=False,
         )
         embed.add_field(name="Minecraft", value="`status`", inline=False)
@@ -123,6 +124,26 @@ def setup(bot):
         embed.add_field(name="Top Role", value=user.top_role.mention, inline=True)
         embed.set_footer(text=f"Requested by {ctx.author}")
         await ctx.send(embed=embed)
+
+    @bot.command(
+        name="someone",
+        description="Pings a random member. Used in reply to a message, deletes that message and pings a random user instead.",
+    )
+    async def someone(ctx):
+        members = [m for m in ctx.guild.members if not m.bot]
+        if not members:
+            await ctx.send("No one to ping.")
+            return
+        target = random.choice(members)
+
+        if ctx.message.reference is not None:
+            try:
+                replied = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+                await replied.delete()
+            except (discord.NotFound, discord.Forbidden):
+                pass
+
+        await ctx.send(target.mention)
 
     # Snipe functionality
     snipe_messages_delete = {}

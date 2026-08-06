@@ -16,6 +16,7 @@ class CoalBot(Bot):
 
 intents = discord.Intents.default()
 intents.message_content = True  # Enable the message content intent
+intents.members = True  # Needed to see the full member list for -someone
 
 # Bot Params
 
