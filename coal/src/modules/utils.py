@@ -18,8 +18,32 @@ def setup(bot):
     """Setup function to register commands with the bot"""
 
     @bot.command()
-    async def help(ctx):
-        """Displays a list of available commands."""
+    async def help(ctx, *, command_name: str = None):
+        """Displays a list of available commands, or details for one: -help poll"""
+        if command_name:
+            command_name = command_name.strip().lstrip("-")
+            cmd = bot.get_command(command_name)
+            if cmd is None or cmd.hidden:
+                await ctx.send(f"No command called `{command_name}` found.")
+                return
+
+            usage = f"-{cmd.qualified_name} {cmd.signature}".strip()
+            embed = discord.Embed(
+                title=f"Help: {cmd.qualified_name}",
+                description=cmd.help or "No description provided.",
+                color=discord.Color.blue(),
+            )
+            embed.add_field(name="Usage", value=f"`{usage}`", inline=False)
+            if cmd.aliases:
+                embed.add_field(
+                    name="Aliases",
+                    value=", ".join(f"`{a}`" for a in cmd.aliases),
+                    inline=False,
+                )
+            embed.set_footer(text="<param> = required   [param] = optional")
+            await ctx.send(embed=embed)
+            return
+
         embed = discord.Embed(
             title="Help",
             description="[Documentation](https://github.com/cmlostek/coal/blob/main/README.md) ",
@@ -47,6 +71,7 @@ def setup(bot):
         )
         embed.add_field(name="Stats", value="`stats`, `serverstats`, `leaderboard`", inline=False)
         embed.add_field(name="Polls", value="`poll`", inline=False)
+        embed.set_footer(text="Use -help <command> for details on a specific command, e.g. -help poll")
         await ctx.send(embed=embed)
 
     @bot.command()
