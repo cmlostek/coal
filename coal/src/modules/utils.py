@@ -46,6 +46,7 @@ def setup(bot):
             inline=False,
         )
         embed.add_field(name="Stats", value="`stats`, `serverstats`, `leaderboard`", inline=False)
+        embed.add_field(name="Polls", value="`poll`", inline=False)
         await ctx.send(embed=embed)
 
     @bot.command()
